@@ -965,7 +965,6 @@ _Py_PreInitializeFromConfig(const PyConfig *config,
     }
 
     PyPreConfig preconfig;
-
     _PyPreConfig_InitFromConfig(&preconfig, config);
 
     if (!config->parse_argv) {
@@ -1008,14 +1007,15 @@ pyinit_core(_PyRuntimeState *runtime,
 {
     PyStatus status;
 
+    // （如果之前没执行过 `PreConfig` 配置）先执行 `PreConfig` 配置
     status = _Py_PreInitializeFromConfig(src_config, NULL);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 复制（入参）src_config 到局部变量
     PyConfig config;
     PyConfig_InitPythonConfig(&config);
-
     status = _PyConfig_Copy(&config, src_config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
@@ -1218,13 +1218,17 @@ Py_InitializeFromConfig(const PyConfig *config)
     }
     _PyRuntimeState *runtime = &_PyRuntime;
 
+    // 初始化 Python 内核
     PyThreadState *tstate = NULL;
     status = pyinit_core(runtime, config, &tstate);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
+
+    // 获取初始化完成并最终应用到解释器的配置信息
     config = _PyInterpreterState_GetConfig(tstate->interp);
 
+    // 
     if (config->_init_main) {
         status = pyinit_main(tstate);
         if (_PyStatus_EXCEPTION(status)) {

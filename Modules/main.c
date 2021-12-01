@@ -41,17 +41,23 @@ pymain_init(const _PyArgv *args)
         return status;
     }
 
+    // 创建并初始化 PyPreConfig 的默认配置信息
     PyPreConfig preconfig;
     PyPreConfig_InitPythonConfig(&preconfig);
 
+    // 从 args（包括系统环境变量）中加载和解析 PyPreConfig 配置信息，并将其设置到 PyRuntime 的 preconfig 属性
     status = _Py_PreInitializeFromPyArgv(&preconfig, args);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 创建并初始化 PyConfig 的默认配置信息
     PyConfig config;
     PyConfig_InitPythonConfig(&config);
 
+    // 将 args 信息（命令行参数）保存到 config 的 argv 属性中
+    // 并且在此之前，这里会先用  PyConfig 中的配置信息，来重载 PyPreConfig 相关的设定
+    // 注意：在 PyConfig 配置信息中，其实也包含了某些和 PyPreConfig 相关的配置信息
     /* pass NULL as the config: config is read from command line arguments,
        environment variables, configuration files */
     if (args->use_bytes_argv) {
@@ -64,6 +70,7 @@ pymain_init(const _PyArgv *args)
         goto done;
     }
 
+    // 用  PyConfig 配置信息，来初始化 Python 的运行环境
     status = Py_InitializeFromConfig(&config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
