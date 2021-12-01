@@ -744,11 +744,14 @@ preconfig_read(PyPreConfig *config, _PyPreCmdline *cmdline)
 {
     PyStatus status;
 
+    // 执行 _PyPreCmdline 的解析处理
+    // 注意，_PyPreCmdline 的解析处理，并不仅仅是从命令行参数中读取，它还会从系统环境变量中读取相关的配置信息
     status = _PyPreCmdline_Read(cmdline, config);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 将 _PyPreCmdline 解析出的选项值，复制到 config
     precmdline_set_preconfig(cmdline, config);
 
     /* legacy_windows_fs_encoding, coerce_c_locale, utf8_mode */
@@ -760,11 +763,13 @@ preconfig_read(PyPreConfig *config, _PyPreCmdline *cmdline)
 
     preconfig_init_coerce_c_locale(config);
 
+    // 初始化 PyPreConfig 中的 utf8_mode 选项
     status = preconfig_init_utf8_mode(config, cmdline);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 初始化 PyPreConfig 中的 allocator 选项
     /* allocator */
     status = preconfig_init_allocator(config);
     if (_PyStatus_EXCEPTION(status)) {
@@ -801,9 +806,11 @@ _PyPreConfig_Read(PyPreConfig *config, const _PyArgv *args)
         return status;
     }
 
+    // 用全局变量的值来构造 config
     preconfig_get_global_vars(config);
 
     /* Copy LC_CTYPE locale, since it's modified later */
+    // 通过标准 c 库，获取当前操作系统本地字符集设置
     const char *loc = setlocale(LC_CTYPE, NULL);
     if (loc == NULL) {
         return _PyStatus_ERR("failed to LC_CTYPE locale");
@@ -814,18 +821,22 @@ _PyPreConfig_Read(PyPreConfig *config, const _PyArgv *args)
     }
 
     /* Save the config to be able to restore it if encodings change */
+    // 将 config 信息复制到局部变量
     PyPreConfig save_config;
-
     status = _PyPreConfig_InitFromPreConfig(&save_config, config);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
     /* Set LC_CTYPE to the user preferred locale */
+    // 用环境变量指定选项，来对本地化进行设定
     if (config->configure_locale) {
         _Py_SetLocaleFromEnv(LC_CTYPE);
     }
 
+    // 这里的 _PyPreCmdline，是一个专门对命令行参数进行解析的工具对象。它含有
+    // * 一个 string list，用于存储一组（多个）命令行选项
+    // * 和 PyPreConfig 对应的一组选项变量，用于存储解析出来的选项值
     _PyPreCmdline cmdline = _PyPreCmdline_INIT;
     int init_utf8_mode = Py_UTF8Mode;
 #ifdef MS_WINDOWS
@@ -835,6 +846,7 @@ _PyPreConfig_Read(PyPreConfig *config, const _PyArgv *args)
     int locale_coerced = 0;
     int loops = 0;
 
+    // 循环，以自动适配和切换字符编码
     while (1) {
         int utf8_mode = config->utf8_mode;
 
@@ -853,6 +865,7 @@ _PyPreConfig_Read(PyPreConfig *config, const _PyArgv *args)
         Py_LegacyWindowsFSEncodingFlag = config->legacy_windows_fs_encoding;
 #endif
 
+        // 将 args 指定的命名行参数，加载（根据字符集解码）到 _PyPreCmdline 对象
         if (args) {
             // Set command line arguments at each iteration. If they are bytes
             // strings, they are decoded from the new encoding.
@@ -862,11 +875,13 @@ _PyPreConfig_Read(PyPreConfig *config, const _PyArgv *args)
             }
         }
 
+        // 解析命令行参数，并将其加载到 config
         status = preconfig_read(config, &cmdline);
         if (_PyStatus_EXCEPTION(status)) {
             goto done;
         }
 
+        // 判断字符集是否有效
         /* The legacy C locale assumes ASCII as the default text encoding, which
          * causes problems not only for the CPython runtime, but also other
          * components like GNU readline.
@@ -896,10 +911,12 @@ _PyPreConfig_Read(PyPreConfig *config, const _PyArgv *args)
             }
         }
 
+        // 如果字符集有效，完成 config 设置
         if (!encoding_changed) {
             break;
         }
 
+        // 恢复 config 为初始（备份）状态，并重新解析
         /* Reset the configuration before reading again the configuration,
            just keep UTF-8 Mode and coerce C locale value. */
         int new_utf8_mode = config->utf8_mode;
