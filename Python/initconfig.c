@@ -3085,10 +3085,27 @@ _PyConfig_Read(PyConfig *config, int compute_path_config)
     }
 
     // 解析 PyConfig 中的，和命令行有关的配置。具体包括
-    // - Python 程序文件名
-    // - Python 执行的 .py 脚本程序文件名
-    // - 警告的处理方式
-    // - 
+    // * Python 程序文件名
+    // * Python 执行的 .py 脚本程序文件名
+    // * 警告的处理方式
+    // * -c: run_command = get
+    // * -m: run_module = get
+    // * -b: bytes_warning++
+    // * -d: parser_debug++
+    // * -i: inspect++; interactive++
+    // * -O: optimization_level++
+    // * -B: write_bytecode = 0
+    // * -s: user_site_directory = 0
+    // * -S: site_import = 0
+    // * -t: ignored for backwards compatibility
+    // * -u: buffered_stdio = 0
+    // * -v: verbose++
+    // * -x: skip_source_first_line = 1
+    // * -h|?: config_usage(); _PyStatus_EXIT(0);
+    // * -V: print_version++
+    // * -W: PyWideStringList_Append(warnoptions)
+    // * -q: quiet++
+    // * -R: use_hash_seed = 0
     status = config_read_cmdline(config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
