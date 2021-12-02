@@ -3117,7 +3117,7 @@ _PyConfig_Read(PyConfig *config, int compute_path_config)
         goto done;
     }
 
-    // 解析 PyConfig 中的，和 有关的配置
+    // 解析 PyConfig 中的，和命令行无关的配置
     status = config_read(config, compute_path_config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
