@@ -1023,6 +1023,7 @@ pyinit_core(_PyRuntimeState *runtime,
 
     // Read the configuration, but don't compute the path configuration
     // (it is computed in the main init).
+    // 这里的参数 compute_path_config 被指定为 0，像上面注释说的，此时不解析和 path 相关的配置
     status = _PyConfig_Read(&config, 0);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;

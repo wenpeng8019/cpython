@@ -1495,6 +1495,9 @@ config_init_program_name(PyConfig *config)
 {
     PyStatus status;
 
+    // ？？？ _Py_path_config 是给 SDK 使用的基于全局变量的配置参数，还是最终程序运行后的 path 状态信息？
+
+    // 如果 program_name 已经被设定过，之前通过 Py_SetProgramName() 接口直接设定过
     /* If Py_SetProgramName() was called, use its value */
     const wchar_t *program_name = _Py_path_config.program_name;
     if (program_name != NULL) {
@@ -1504,6 +1507,8 @@ config_init_program_name(PyConfig *config)
         }
         return _PyStatus_OK();
     }
+
+    // 下面是自动获取程序名的处理
 
 #ifdef __APPLE__
     /* On MacOS X, when the Python interpreter is embedded in an
@@ -1515,6 +1520,8 @@ config_init_program_name(PyConfig *config)
        so the actual executable path is passed in an environment variable.
        See Lib/plat-mac/bundlebuilder.py for details about the bootstrap
        script. */
+
+    // 从系统环境变量中获取
     const char *p = config_get_env(config, "PYTHONEXECUTABLE");
     if (p != NULL) {
         status = CONFIG_SET_BYTES_STR(config, &config->program_name, p,
@@ -1555,6 +1562,8 @@ config_init_program_name(PyConfig *config)
 #endif   /* WITH_NEXT_FRAMEWORK */
 #endif   /* __APPLE__ */
 
+    // 通过命令行参数的第一项 argv[0] 获取
+    // 注意，argv[0] 可能为 ""。也就是说，有些操作系统不会将程序名作为命令行的第一个参数、
     /* Use argv[0] if available and non-empty */
     const PyWideStringList *argv = &config->argv;
     if (argv->length >= 1 && argv->items[0][0] != L'\0') {
@@ -1565,6 +1574,7 @@ config_init_program_name(PyConfig *config)
         return _PyStatus_OK();
     }
 
+    // 不得已时，使用默认值
     /* Last fall back: hardcoded name */
 #ifdef MS_WINDOWS
     const wchar_t *default_program_name = L"python";
@@ -1576,6 +1586,7 @@ config_init_program_name(PyConfig *config)
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
+
     return _PyStatus_OK();
 }
 
@@ -2818,26 +2829,30 @@ core_read_precmdline(PyConfig *config, _PyPreCmdline *precmdline)
 {
     PyStatus status;
 
+    // 如果需要解析 argv，将 config->argv 复制到 precmdline->argv
     if (config->parse_argv == 1) {
         if (_PyWideStringList_Copy(&precmdline->argv, &config->argv) < 0) {
             return _PyStatus_NO_MEMORY();
         }
     }
 
+    // 从 PyRuntime 当前的 preconfig 配置中，复制出一份到临时变量 preconfig，作为 preconfig 的基础值
     PyPreConfig preconfig;
-
     status = _PyPreConfig_InitFromPreConfig(&preconfig, &_PyRuntime.preconfig);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 用 PyConfig 中设定的相关 preconfig 选项（如果存在），重载覆盖 preconfig 的基础值
     _PyPreConfig_GetConfig(&preconfig, config);
 
+    // 执行 preconfig 解析（从各个配置信息源）到 precmdline
     status = _PyPreCmdline_Read(precmdline, &preconfig);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 将解析到 precmdline 中的配置信息，保存到 config
     status = _PyPreCmdline_SetConfig(precmdline, config);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -2850,17 +2865,20 @@ core_read_precmdline(PyConfig *config, _PyPreCmdline *precmdline)
 static PyStatus
 config_run_filename_abspath(PyConfig *config)
 {
+    // 如果 Python 执行的不是脚本文件（执行的是模块、或命令行交换模式），直接返回
     if (!config->run_filename) {
         return _PyStatus_OK();
     }
 
 #ifndef MS_WINDOWS
+    // 如果当前运行路径已经是绝对地址，直接返回
     if (_Py_isabs(config->run_filename)) {
         /* path is already absolute */
         return _PyStatus_OK();
     }
 #endif
 
+    // 用相对路径计算绝对路径
     wchar_t *abs_filename;
     if (_Py_abspath(config->run_filename, &abs_filename) < 0) {
         /* failed to get the absolute path of the command line filename:
@@ -2871,6 +2889,7 @@ config_run_filename_abspath(PyConfig *config)
         return _PyStatus_NO_MEMORY();
     }
 
+    // 替换为绝对路径
     PyMem_RawFree(config->run_filename);
     config->run_filename = abs_filename;
     return _PyStatus_OK();
@@ -2885,10 +2904,12 @@ config_read_cmdline(PyConfig *config)
     PyWideStringList env_warnoptions = _PyWideStringList_INIT;
     PyWideStringList sys_warnoptions = _PyWideStringList_INIT;
 
+    // 标记 “执行过命令行解析”
     if (config->parse_argv < 0) {
         config->parse_argv = 1;
     }
 
+    // 解析 Python（解释器）程序的程序名
     if (config->program_name == NULL) {
         status = config_init_program_name(config);
         if (_PyStatus_EXCEPTION(status)) {
@@ -2897,12 +2918,15 @@ config_read_cmdline(PyConfig *config)
     }
 
     if (config->parse_argv == 1) {
+
+        // 从命令行中解析警告的处理方式
         Py_ssize_t opt_index;
         status = config_parse_cmdline(config, &cmdline_warnoptions, &opt_index);
         if (_PyStatus_EXCEPTION(status)) {
             goto done;
         }
 
+        // 解析 Python 执行的 .py 脚本程序（文件）的绝对路径
         status = config_run_filename_abspath(config);
         if (_PyStatus_EXCEPTION(status)) {
             goto done;
@@ -2920,6 +2944,7 @@ config_read_cmdline(PyConfig *config)
         }
     }
 
+    // 从系统环境中解析警告的处理方式
     if (config->use_environment) {
         status = config_init_env_warnoptions(config, &env_warnoptions);
         if (_PyStatus_EXCEPTION(status)) {
@@ -2933,6 +2958,7 @@ config_read_cmdline(PyConfig *config)
         goto done;
     }
 
+    // 聚合设置警告的处理方式（优先级会在 config_init_warnoptions 中说明）
     status = config_init_warnoptions(config,
                                      &cmdline_warnoptions,
                                      &env_warnoptions,
@@ -3018,13 +3044,16 @@ _PyConfig_Read(PyConfig *config, int compute_path_config)
 {
     PyStatus status;
 
+    //（如果之前没执行过 `PreConfig` 配置）先执行 `PreConfig` 配置
     status = _Py_PreInitializeFromConfig(config, NULL);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 从全局变量中加载 config 的设定值
     config_get_global_vars(config);
 
+    // 备份原始的 config->argv 到 config->orig_argv
     if (config->orig_argv.length == 0
         && !(config->argv.length == 1
              && wcscmp(config->argv.items[0], L"") == 0))
@@ -3034,18 +3063,27 @@ _PyConfig_Read(PyConfig *config, int compute_path_config)
         }
     }
 
+    // 解析 PyConfig 中的，和 PreConfig 相关的配置
+    // 这里会以 PyRuntime 当前的 preconfig 配置作为 preconfig 的基础值，然后用 config 中的值重载，
+    // 最后（重新从各个配置信息源）执行解析，并将解析后的配置，写入 config
+    // 也就是说，这里
+    // - 并不会直接使用 PyRuntime 中的 preconfig
+    // - 也不会变更 PyRuntime 中的 preconfig
     _PyPreCmdline precmdline = _PyPreCmdline_INIT;
     status = core_read_precmdline(config, &precmdline);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
     }
 
+    // 对于 isolated 模式，同时会禁用 use_environment 和 user_site_directory
     assert(config->isolated >= 0);
     if (config->isolated) {
         config->use_environment = 0;
         config->user_site_directory = 0;
     }
 
+    // 解析 PyConfig 中的，和命令有关的配置
+    // 这里实际只解析了 3 项：
     status = config_read_cmdline(config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
@@ -3057,6 +3095,7 @@ _PyConfig_Read(PyConfig *config, int compute_path_config)
         goto done;
     }
 
+    // 解析 PyConfig 中的，和 有关的配置
     status = config_read(config, compute_path_config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
