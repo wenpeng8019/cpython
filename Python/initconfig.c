@@ -2919,7 +2919,9 @@ config_read_cmdline(PyConfig *config)
 
     if (config->parse_argv == 1) {
 
-        // 从命令行中解析警告的处理方式
+        // 解析命令行中的参数。同时
+        // - 并将从命令行解析得到的警告处理方式，保存到 cmdline_warnoptions
+        // - opt_index 表示参数中 opt 部分的起点。也就是跳过 Python 要运行的（脚本）程序体（script-file、module、cmd-iteractive）
         Py_ssize_t opt_index;
         status = config_parse_cmdline(config, &cmdline_warnoptions, &opt_index);
         if (_PyStatus_EXCEPTION(status)) {
@@ -3082,8 +3084,11 @@ _PyConfig_Read(PyConfig *config, int compute_path_config)
         config->user_site_directory = 0;
     }
 
-    // 解析 PyConfig 中的，和命令有关的配置
-    // 这里实际只解析了 3 项：
+    // 解析 PyConfig 中的，和命令行有关的配置。具体包括
+    // - Python 程序文件名
+    // - Python 执行的 .py 脚本程序文件名
+    // - 警告的处理方式
+    // - 
     status = config_read_cmdline(config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
