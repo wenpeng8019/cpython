@@ -1633,6 +1633,7 @@ config_init_home(PyConfig *config)
 {
     assert(config->home == NULL);
 
+    // 如果 home 已经被设定过，之前通过 Py_SetPythonHome() 接口直接设定过
     /* If Py_SetPythonHome() was called, use its value */
     wchar_t *home = _Py_path_config.home;
     if (home) {
@@ -1643,6 +1644,7 @@ config_init_home(PyConfig *config)
         return _PyStatus_OK();
     }
 
+    // 从系统环境变量中读取 home（如果禁止系统环境变量或系统环境变量不存在该设定，则设置 home 为 NULL）
     return CONFIG_GET_ENV_DUP(config, &config->home,
                               L"PYTHONHOME", "PYTHONHOME");
 }
@@ -2234,6 +2236,8 @@ config_read(PyConfig *config, int compute_path_config)
     PyStatus status;
     const PyPreConfig *preconfig = &_PyRuntime.preconfig;
 
+    // 从系统环境变量中读取配置信息
+    // 注意：这里不包括对 `home` 的设定
     if (config->use_environment) {
         status = config_read_env_vars(config);
         if (_PyStatus_EXCEPTION(status)) {
@@ -2256,6 +2260,10 @@ config_read(PyConfig *config, int compute_path_config)
         return status;
     }
 
+    // 解析 `home` 设定
+    // `home` 设定可通过系统环境变量、和 SDK API 来完成的。
+    // 注意：通过系统环境变量对 `home` 进行设定，并不会被（use_environment）禁用
+    // 如果不存在针对 `home` 的设定，则这里会保持 `home` 的值为 NULL，即表示使用默认值
     if (config->home == NULL) {
         status = config_init_home(config);
         if (_PyStatus_EXCEPTION(status)) {
@@ -2263,6 +2271,9 @@ config_read(PyConfig *config, int compute_path_config)
         }
     }
 
+    // 解析 `executable` 设定
+    // `executable` 其实就是 ProgramFullPath，它只能通过 SDK API 来设定
+    // 如果不存在针对 `executable` 的设定，则这里会保持 `executable` 的值为 NULL，即表示使用默认值
     if (config->executable == NULL) {
         status = config_init_executable(config);
         if (_PyStatus_EXCEPTION(status)) {
@@ -2270,6 +2281,8 @@ config_read(PyConfig *config, int compute_path_config)
         }
     }
 
+    // 解析 `platlibdir` 设定
+    // 默认情况下，也就是禁止使用系统环境变量，或在系统环境变量中没有对其进行设定，则直接使用 PLATLIBDIR 宏定义。
     if(config->platlibdir == NULL) {
         status = CONFIG_SET_BYTES_STR(config, &config->platlibdir, PLATLIBDIR,
                                       "PLATLIBDIR macro");
@@ -2278,12 +2291,15 @@ config_read(PyConfig *config, int compute_path_config)
         }
     }
 
+    //（如果需要）解析导入库设定
     if (config->_install_importlib) {
         status = config_init_import(config, compute_path_config);
         if (_PyStatus_EXCEPTION(status)) {
             return status;
         }
     }
+
+    // 处理相关设定的默认状态、和联系
 
     /* default values */
     if (config->dev_mode) {
@@ -2334,6 +2350,7 @@ config_read(PyConfig *config, int compute_path_config)
         config->configure_c_stdio = 1;
     }
 
+    // 标记 “已经解析过”，以确保只解析一次
     // Only parse arguments once.
     if (config->parse_argv == 1) {
         config->parse_argv = 2;
@@ -3117,7 +3134,24 @@ _PyConfig_Read(PyConfig *config, int compute_path_config)
         goto done;
     }
 
-    // 解析 PyConfig 中的，和命令行无关的配置。具体包括
+    // 解析 PyConfig 中的，和命令行无关的配置。
+    // 这些配置信息的来源包括：由 SDK 接口直接设定的全局变量、系统环境变量
+    // 具体包括：
+    //
+    // * pythonpath_env: PYTHONPATH
+    // * platlibdir: PYTHONPLATLIBDIR
+    // * user_site_directory: PYTHONNOUSERSITE
+    //
+    // * verbose: PYTHONVERBOSE
+    // * optimization_level: PYTHONOPTIMIZE
+    // * parser_debug: PYTHONDEBUG
+    // * inspect: PYTHONINSPECT
+    // * buffered_stdio: PYTHONUNBUFFERED
+    // * write_bytecode: PYTHONDONTWRITEBYTECODE
+    // * dump_refs: PYTHONDUMPREFS
+    // * dump_refs_file: PYTHONDUMPREFSFILE
+    // * malloc_stats: PYTHONMALLOCSTATS
+    // * hash_seed: PYTHONHASHSEED
     status = config_read(config, compute_path_config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;

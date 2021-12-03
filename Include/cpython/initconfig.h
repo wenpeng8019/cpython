@@ -135,7 +135,7 @@ typedef struct PyConfig {
     int _config_init;     /* _PyConfigInitEnum value */
 
     int isolated;
-    int use_environment;
+    int use_environment; // 是否从系统环境变量中读取配置信息
     int dev_mode;
     int install_signal_handlers;
     int use_hash_seed;
