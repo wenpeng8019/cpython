@@ -2147,11 +2147,13 @@ config_init_import(PyConfig *config, int compute_path_config)
 {
     PyStatus status;
 
+    // （优先）执行 Path 管理模块的初始化处理
     status = _PyConfig_InitPathConfig(config, compute_path_config);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 初始化（用于调试的）use_frozen_modules 选项
     /* -X frozen_modules=[on|off] */
     if (config->use_frozen_modules < 0) {
         const wchar_t *value = config_get_xoption_value(config, L"frozen_modules");
@@ -2291,7 +2293,7 @@ config_read(PyConfig *config, int compute_path_config)
         }
     }
 
-    //（如果需要）解析导入库设定
+    //（如果需要，默认）解析导入库设定
     if (config->_install_importlib) {
         status = config_init_import(config, compute_path_config);
         if (_PyStatus_EXCEPTION(status)) {
@@ -3135,7 +3137,7 @@ _PyConfig_Read(PyConfig *config, int compute_path_config)
     }
 
     // 解析 PyConfig 中的，和命令行无关的配置。
-    // 这些配置信息的来源包括：由 SDK 接口直接设定的全局变量、系统环境变量
+    // 这些配置信息的来源包括：由 SDK 接口直接设定的全局变量、系统环境变量、以及在编译时指定的宏定义
     // 具体包括：
     //
     // * pythonpath_env: PYTHONPATH

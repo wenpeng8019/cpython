@@ -1419,6 +1419,7 @@ calculate_init(PyCalculatePath *calculate, const PyConfig *config)
     calculate->pythonpath_env = config->pythonpath_env;
     calculate->platlibdir = config->platlibdir;
 
+    // 读取系统环境变量 PATH
     const char *path = getenv("PATH");
     if (path) {
         calculate->path_env = Py_DecodeLocale(path, &len);
@@ -1426,6 +1427,8 @@ calculate_init(PyCalculatePath *calculate, const PyConfig *config)
             return DECODE_LOCALE_ERR("PATH environment variable", len);
         }
     }
+
+    // 读取宏定义 PYTHONPATH、PREFIX、EXEC_PREFIX、VPATH
 
     /* Decode macros */
     calculate->pythonpath_macro = Py_DecodeLocale(PYTHONPATH, &len);
@@ -1444,6 +1447,8 @@ calculate_init(PyCalculatePath *calculate, const PyConfig *config)
     if (!calculate->vpath_macro) {
         return DECODE_LOCALE_ERR("VPATH macro", len);
     }
+
+    // 计算 Python 标准库（相对）路径（lib_python）：platlibdir +  "/python"  + 版本号
 
     // <platlibdir> / "pythonX.Y"
     wchar_t *pyversion = Py_DecodeLocale("python" VERSION, &len);
@@ -1588,6 +1593,7 @@ PyStatus
 _PyPathConfig_Calculate(_PyPathConfig *pathconfig, const PyConfig *config)
 {
     PyStatus status;
+
     PyCalculatePath calculate;
     memset(&calculate, 0, sizeof(calculate));
 

@@ -345,16 +345,19 @@ pathconfig_init(_PyPathConfig *pathconfig, const PyConfig *config,
     PyMemAllocatorEx old_alloc;
     _PyMem_SetDefaultAllocator(PYMEM_DOMAIN_RAW, &old_alloc);
 
+    // （默认优先）读取（由 SDK 接口设定的）全局（路径设置）变量中设定的值
     status = pathconfig_copy(pathconfig, &_Py_path_config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
     }
 
+    // 读取由 PyConfig 直接设定的和 Path 相关配置
     status = pathconfig_set_from_config(pathconfig, config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
     }
 
+    // 从各个配置源，加载并解析和路径相关的配置
     if (compute_path_config) {
         status = _PyPathConfig_Calculate(pathconfig, config);
     }
@@ -368,14 +371,17 @@ done:
 static PyStatus
 config_init_pathconfig(PyConfig *config, int compute_path_config)
 {
+    // 创建一个局部的 _PyPathConfig 对象
     _PyPathConfig pathconfig = _PyPathConfig_INIT;
     PyStatus status;
 
+    // 初始化（加载、解析）路径配置
     status = pathconfig_init(&pathconfig, config, compute_path_config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
     }
 
+    // 用（计算得到的） pathconfig 的 module_search_path 来初始化构造 config 的 module_search_paths
     if (!config->module_search_paths_set
         && pathconfig.module_search_path != NULL)
     {
@@ -384,6 +390,8 @@ config_init_pathconfig(PyConfig *config, int compute_path_config)
             goto done;
         }
     }
+
+    // 将（计算得到的）pathconfig 中的路径信息，复制到 config 中
 
 #define COPY_ATTR(PATH_ATTR, CONFIG_ATTR) \
         if (config->CONFIG_ATTR == NULL && pathconfig.PATH_ATTR != NULL) { \
