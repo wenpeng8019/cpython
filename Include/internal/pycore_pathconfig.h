@@ -9,6 +9,7 @@ extern "C" {
 #endif
 
 typedef struct _PyPathConfig {
+
     /* Full path to the Python program */
     wchar_t *program_full_path;
     wchar_t *prefix;
@@ -16,10 +17,16 @@ typedef struct _PyPathConfig {
     wchar_t *stdlib_dir;
     /* Set by Py_SetPath(), or computed by _PyConfig_InitPathConfig() */
     wchar_t *module_search_path;
+
     /* Python program name */
+    // Python 程序名，用于反向解析计算 program_full_path
+    // 最终目的是解析其所在路径，从而确定 stdlib 位置（可能的位置之一）
     wchar_t *program_name;
+    // 用于重载 stdlib 所在目录
+    // 使得默认相对于 program_full_path 的 stdlib 目录，可被重置到任何目标位置
     /* Set by Py_SetPythonHome() or PYTHONHOME environment variable */
     wchar_t *home;
+
 #ifdef MS_WINDOWS
     /* isolated and site_import are used to set Py_IsolatedFlag and
        Py_NoSiteFlag flags on Windows in read_pth_file(). These fields

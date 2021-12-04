@@ -424,7 +424,7 @@ search_for_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
 
     PyStatus status;
 
-    // 如果设定了系统环境变量 PYTHONHOME，则直接以该设置为准
+    // 如果设定了系统环境变量 $PYTHONHOME，则直接以该设置为准
     // 此时 prefix = <home> / <lib_python>
     /* If PYTHONHOME is set, we believe it unconditionally */
     if (pathconfig->home) {
@@ -1376,7 +1376,10 @@ done:
 static PyStatus
 calculate_module_search_path(PyCalculatePath *calculate,
                              _PyPathConfig *pathconfig)
-{
+{   // @ calculate_path
+
+    // 先计算 module_search_path（字符串）值的长度，用以创建字符串。
+
     /* Calculate size of return buffer */
     size_t bufsz = 0;
     if (calculate->pythonpath_env != NULL) {
@@ -1413,16 +1416,26 @@ calculate_module_search_path(PyCalculatePath *calculate,
     }
     buf[0] = '\0';
 
+    // 重新计算并构造 module_search_path（字符串）值
+
+    // 优先查找由系统环境变量 $PYTHONPATH 指定的位置
     /* Run-time value of $PYTHONPATH goes first */
     if (calculate->pythonpath_env) {
         wcscpy(buf, calculate->pythonpath_env);
         wcscat(buf, delimiter);
     }
 
+    // 之后查找 Python 默认指定的 zip 路径
     /* Next is the default zip path */
     wcscat(buf, calculate->zip_path);
     wcscat(buf, delimiter);
 
+    // 然后遍历，在编译宏定义 pythonpath_macro 中设定的路径
+    // > 编译宏定义 pythonpath_macro 的值可以包含多个路径，路径之间会用 DELIM 分隔
+    // > 路径项可以是绝对地址，也可以是相对地址
+    // > 如果是相对地址，那么它会作为 calculate->prefix 目录都子目录
+    //   注意，calculate->prefix 路径，和 pathconfig->prefix 路径不是一个概念。
+    //   这里的 calculate->prefix 路径，就是 stdlib 目录
     /* Next goes merge of compile-time $PYTHONPATH with
      * dynamically located prefix.
      */
@@ -1454,6 +1467,7 @@ calculate_module_search_path(PyCalculatePath *calculate,
     }
     wcscat(buf, delimiter);
 
+    // 最后查找共享库路径
     /* Finally, on goes the directory for dynamic-load modules */
     wcscat(buf, calculate->exec_prefix);
 
@@ -1582,6 +1596,7 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         return status;
     }
 
+    // 如果没有解析到 `prefix` 和 `exec_prefix`，（根据设定）给出警告提示
     if ((!calculate->prefix_found || !calculate->exec_prefix_found)
         && calculate->warnings)
     {
@@ -1686,7 +1701,15 @@ _PyPathConfig_Calculate(_PyPathConfig *pathconfig, const PyConfig *config)
     }
 
     // 解析获取路径信息配置。具体包括：
-    // * 
+    // * pathconfig->program_full_path
+    // * pathconfig->stdlib_dir
+    // * pathconfig->prefix
+    // * pathconfig->exec_prefix
+    // * pathconfig->module_search_path
+    //   + 系统环境变量 $PYTHONPATH
+    //   + calculate->zip_path
+    //   + calculate->prefix(stdlib) / %pythonpath_macro%
+    //   + calculate->exec_prefix
     status = calculate_path(&calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
