@@ -447,7 +447,11 @@ _Py_SetLocaleFromEnv(int category)
 
 static int
 interpreter_update_config(PyThreadState *tstate, int only_update_path_config)
-{
+{   // @ _PyInterpreterState_SetConfig
+    // @ pyinit_main_reconfigure
+    // @ init_interp_main
+
+
     const PyConfig *config = &tstate->interp->config;
 
     if (!only_update_path_config) {
@@ -1062,7 +1066,9 @@ pyinit_main_reconfigure(PyThreadState *tstate)
 
 static PyStatus
 init_interp_main(PyThreadState *tstate)
-{
+{   // @ pyinit_main
+    // @ new_interpreter
+
     extern void _PyThread_debug_deprecation(void);
 
     assert(!_PyErr_Occurred(tstate));

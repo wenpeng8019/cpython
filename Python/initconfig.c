@@ -2143,7 +2143,7 @@ is_dev_env(PyConfig *config)
 static PyStatus
 config_init_import(PyConfig *config, int compute_path_config)
 {   // @ config_read
-    // @ _PyConfig_InitImportConfig
+    // @ _PyConfig_InitImportConfig(config, 1)
 
     PyStatus status;
 
@@ -2234,7 +2234,7 @@ _Py_check_xoptions(const PyWideStringList *xoptions, const wchar_t **names)
 
 static PyStatus
 config_read(PyConfig *config, int compute_path_config)
-{
+{   // @ _PyConfig_Read
     PyStatus status;
     const PyPreConfig *preconfig = &_PyRuntime.preconfig;
 
