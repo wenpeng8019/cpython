@@ -1696,7 +1696,7 @@ _PyPathConfig_Calculate(_PyPathConfig *pathconfig, const PyConfig *config)
     // 初始化路径配置信息解析工具类，即从各个配置源，读取加载和路径相关的配置。具体包括:
     // * 系统环境变量 $PATH
     // * 编译宏定义 PYTHONPATH、PREFIX、EXEC_PREFIX、VPATH
-    // * 计算得到的 Python 标准库（相对）路径（lib_python）<platlibdir> / "pythonX.Y"
+    // * Python 标准库（相对）路径（lib_python）<platlibdir> / "pythonX.Y"
     status = calculate_init(&calculate, config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
@@ -1712,6 +1712,8 @@ _PyPathConfig_Calculate(_PyPathConfig *pathconfig, const PyConfig *config)
     //   + calculate->zip_path
     //   + calculate->prefix(stdlib) / %pythonpath_macro%
     //   + calculate->exec_prefix
+    // 注意，只有当 pathconfig->xxx == NULL 时，计算的结果才会赋值给 pathconfig->xxx
+    // 否则会保留 pathconfig->xxx 之前的值不变
     status = calculate_path(&calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;

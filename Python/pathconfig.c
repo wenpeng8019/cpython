@@ -15,10 +15,13 @@
 extern "C" {
 #endif
 
-// - 定义: 路径管理对象（全局变量）
-// + 
+// - 定义: 路径设置管理对象（全局变量）
+// + 该路径设置是给 SDK 接口来设定的。
+//   其中设置的值最终会被合并到 config 中，而不是直接作为程序运行后的路径状态值
+//   不过，在 interpreter_update_config 和 pyinit_core_reconfigure 时，
+//   这里的值又会被程序最终的路径配置信息，通过 _PyConfig_WritePathConfig 写入
+//   因此，这里的路径配置信息，和程序最终运行后的路径状态值，是同步的
 _PyPathConfig _Py_path_config = _PyPathConfig_INIT;
-
 
 static int
 copy_wstr(wchar_t **dst, const wchar_t *src)
@@ -147,7 +150,9 @@ _PyWideStringList_Join(const PyWideStringList *list, wchar_t sep)
 
 static PyStatus
 pathconfig_set_from_config(_PyPathConfig *pathconfig, const PyConfig *config)
-{   // 将 PyConfig 中的和 Path 有关的设定，复制到 pathconfig（_PyPathConfig）
+{   // @ _PyConfig_WritePathConfig
+    // @ pathconfig_init
+    // 将 PyConfig 中的和 Path 有关的设定，复制到 pathconfig（_PyPathConfig）
     
     PyStatus status;
     PyMemAllocatorEx old_alloc;
@@ -272,7 +277,10 @@ fail:
 // 将 PyConfig 中的和 Path 有关的设定，写入到（全局）管理对象（_Py_path_config）中
 PyStatus
 _PyConfig_WritePathConfig(const PyConfig *config)
-{
+{   // @ extern
+    // @ pyinit_core_reconfigure
+    // @ interpreter_update_config
+
     return pathconfig_set_from_config(&_Py_path_config, config);
 }
 
@@ -351,19 +359,19 @@ pathconfig_init(_PyPathConfig *pathconfig, const PyConfig *config,
     PyMemAllocatorEx old_alloc;
     _PyMem_SetDefaultAllocator(PYMEM_DOMAIN_RAW, &old_alloc);
 
-    // （默认优先）读取（由 SDK 接口设定的）全局（路径设置）变量中设定的值
+    // （优先）读取（由 SDK 接口设定的）全局（路径设置）变量中设定的值，作为默认值
     status = pathconfig_copy(pathconfig, &_Py_path_config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
     }
 
-    // 读取由 PyConfig 直接设定的和 Path 相关配置
+    // 如果 PyConfig 直接设定了和 Path 相关配置，则用 PyConfig 设定的值重载默认值
     status = pathconfig_set_from_config(pathconfig, config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
     }
 
-    // 从各个配置源，加载并解析和路径相关的配置
+    // 对于 pathconfig 所有值为 NULL 的选项（即还未被赋值的选项），自动解析获取它们的值
     if (compute_path_config) {
         status = _PyPathConfig_Calculate(pathconfig, config);
     }
@@ -377,18 +385,20 @@ done:
 static PyStatus
 config_init_pathconfig(PyConfig *config, int compute_path_config)
 {   // @ _PyConfig_InitPathConfig
+    // @ config_init_import
+    // 初始化 PyConfig 中和 Path 相关的设定
 
     // 创建一个局部的 _PyPathConfig 对象
     _PyPathConfig pathconfig = _PyPathConfig_INIT;
     PyStatus status;
 
-    // 初始化（加载、解析）路径配置
+    // 初始化（加载、解析）路径配置（到 pathconfig 对象）
     status = pathconfig_init(&pathconfig, config, compute_path_config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
     }
 
-    // 用（计算得到的） pathconfig 的 module_search_path 来初始化构造 config 的 module_search_paths
+    // 用（计算得到的）pathconfig 的 module_search_path 来初始化构造 config 的 module_search_paths
     if (!config->module_search_paths_set
         && pathconfig.module_search_path != NULL)
     {
@@ -398,7 +408,7 @@ config_init_pathconfig(PyConfig *config, int compute_path_config)
         }
     }
 
-    // 将（计算得到的）pathconfig 中的路径信息，复制到 config 中
+    // 将（计算得到的）pathconfig 中的（其他）路径信息，复制到 config 中
 
 #define COPY_ATTR(PATH_ATTR, CONFIG_ATTR) \
         if (config->CONFIG_ATTR == NULL && pathconfig.PATH_ATTR != NULL) { \
@@ -450,7 +460,10 @@ done:
 // 初始化 PyConfig 中的，和 Path 有关的设定
 PyStatus
 _PyConfig_InitPathConfig(PyConfig *config, int compute_path_config)
-{
+{   // @ extern
+    // 
+
+
     /* Do we need to calculate the path? */
     if (!config->module_search_paths_set
         || config->executable == NULL
@@ -463,12 +476,14 @@ _PyConfig_InitPathConfig(PyConfig *config, int compute_path_config)
         }
     }
 
+    // 将 prefix 备份复制到 base_prefix，因为 prefix 可以被虚拟环境重载
     if (config->base_prefix == NULL && config->prefix != NULL) {
         if (copy_wstr(&config->base_prefix, config->prefix) < 0) {
             return _PyStatus_NO_MEMORY();
         }
     }
 
+    // 将 exec_prefix 备份复制到 base_exec_prefix，因为 exec_prefix 可以被虚拟环境重载
     if (config->base_exec_prefix == NULL && config->exec_prefix != NULL) {
         if (copy_wstr(&config->base_exec_prefix,
                       config->exec_prefix) < 0) {
@@ -476,6 +491,8 @@ _PyConfig_InitPathConfig(PyConfig *config, int compute_path_config)
         }
     }
 
+    // 将 executable 备份复制到 base_executable，因为 executable 可以被虚拟环境重载
+    // 这里 config->executable 对应的就是 pathconfig->program_full_path
     if (config->base_executable == NULL && config->executable != NULL) {
         if (copy_wstr(&config->base_executable,
                       config->executable) < 0) {

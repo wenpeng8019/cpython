@@ -1495,8 +1495,6 @@ config_init_program_name(PyConfig *config)
 {
     PyStatus status;
 
-    // ？？？ _Py_path_config 是给 SDK 使用的基于全局变量的配置参数，还是最终程序运行后的 path 状态信息？
-
     // 如果 program_name 已经被设定过，之前通过 Py_SetProgramName() 接口直接设定过
     /* If Py_SetProgramName() was called, use its value */
     const wchar_t *program_name = _Py_path_config.program_name;
@@ -2144,7 +2142,9 @@ is_dev_env(PyConfig *config)
 
 static PyStatus
 config_init_import(PyConfig *config, int compute_path_config)
-{
+{   // @ config_read
+    // @ _PyConfig_InitImportConfig
+
     PyStatus status;
 
     // （优先）执行 Path 管理模块的初始化处理

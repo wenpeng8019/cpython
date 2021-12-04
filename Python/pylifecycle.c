@@ -853,7 +853,8 @@ static PyStatus
 pyinit_config(_PyRuntimeState *runtime,
               PyThreadState **tstate_p,
               const PyConfig *config)
-{
+{   // @ pyinit_core
+
     PyStatus status = pycore_init_runtime(runtime, config);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -1004,7 +1005,8 @@ static PyStatus
 pyinit_core(_PyRuntimeState *runtime,
             const PyConfig *src_config,
             PyThreadState **tstate_p)
-{
+{   // @ Py_InitializeFromConfig
+
     PyStatus status;
 
     // （如果之前没执行过 `PreConfig` 配置）先执行 `PreConfig` 配置
@@ -1186,7 +1188,8 @@ init_interp_main(PyThreadState *tstate)
  */
 static PyStatus
 pyinit_main(PyThreadState *tstate)
-{
+{   // @ Py_InitializeFromConfig
+
     PyInterpreterState *interp = tstate->interp;
     if (!interp->runtime->core_initialized) {
         return _PyStatus_ERR("runtime core not initialized");
