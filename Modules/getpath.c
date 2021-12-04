@@ -14,6 +14,8 @@
 #  include <mach-o/dyld.h>
 #endif
 
+// 这个文件包含了所有和系统路径相关的算法。目前最主要的就是对导入路径的计算
+
 /* Search in some common locations for the associated Python libraries.
  *
  * Two directories must be found, the platform independent directory
@@ -21,6 +23,10 @@
  * dependent directory (exec_prefix), containing the shared library
  * modules.  Note that prefix and exec_prefix can be the same directory,
  * but for some installations, they are different.
+ * 有两个 Python 库目录是必须存在的
+ * - prefix，和平台无关的库目录：里面包含都是通用的 .py 和 .pyc 文件
+ * - exec_prefix，和平台相关的库目录：里面存放的是共享库模块
+ * 
  *
  * Py_GetPath() carries out separate searches for prefix and exec_prefix.
  * Each search tries a number of different locations until a ``landmark''
@@ -28,6 +34,9 @@
  * warning message is issued and the preprocessor defined PREFIX and
  * EXEC_PREFIX are used (even though they will not work); python carries on
  * as best as is possible, but most imports will fail.
+ * Py_GetPath() 会尝试从不同的地方来查找 prefix 和 exec_prefix 所在的位置。
+ * 如果最后没有找到 prefix 和 exec_prefix 所在的位置，则会给出警告信息。
+ * 同时会直接使用程序预设的 prefix 和 exec_prefix 目录，尽管这可能不可用。
  *
  * Before any searches are done, the location of the executable is
  * determined.  If argv[0] has one or more slashes in it, it is used
@@ -405,6 +414,8 @@ search_for_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
 {
     PyStatus status;
 
+    // 如果设定了系统环境变量 PYTHONHOME，则直接以该设置为准
+    // 此时 prefix = <home> / <lib_python>
     /* If PYTHONHOME is set, we believe it unconditionally */
     if (pathconfig->home) {
         /* Path: <home> / <lib_python> */
@@ -423,6 +434,8 @@ search_for_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
         return _PyStatus_OK();
     }
 
+    // 判断 Python 是否是通过（make）编译安装的
+    // make 编译安装的 Python，会在（安装的）Python 程序所在的路径下，创建 /Modules/Setup.local 文件
     /* Check to see if argv0_path is in the build directory
 
        Path: <argv0_path> / <BUILD_LANDMARK define> */
@@ -434,6 +447,10 @@ search_for_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
     int is_build_dir = isfile(path);
     PyMem_RawFree(path);
 
+    // 如果 Python 是通过（make）编译安装的
+    // 此时 prefix = <argv0_path> / <VPATH macro> / Lib
+    // 另外，这里会判断 <argv0_path> / <VPATH macro> / Lib 下是否存在 os.py 文件。
+    // 这也意味着 os.py 是标准库中的必要模块
     if (is_build_dir) {
         /* argv0_path is the build directory (BUILD_LANDMARK exists),
            now also check LANDMARK using ismodule(). */
@@ -466,6 +483,10 @@ search_for_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
         }
     }
 
+    // 遍历 argv0_path 及其父路径，只要其下存在 / <lib_python> / os.py 文件
+    // 也就是 <platlibdir> / "pythonX.Y" / os.py 文件
+    // 此时 prefix = <argv0_path>.sup_parent / <lib_python>
+
     /* Search from argv0_path, until root is found */
     status = copy_absolute(prefix, calculate->argv0_path, prefix_len);
     if (_PyStatus_EXCEPTION(status)) {
@@ -492,6 +513,10 @@ search_for_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
         prefix[n] = L'\0';
         reduce(prefix);
     } while (prefix[0]);
+
+
+    // 默认使用编译宏 PREFIX 定义
+    // 此时 prefix = <PREFIX macro> / <lib_python>
 
     /* Look at configure's PREFIX.
        Path: <PREFIX macro> / <lib_python> / LANDMARK */
@@ -1486,6 +1511,7 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
 {
     PyStatus status;
 
+    // 计算获取 Python 程序全路径名
     if (pathconfig->program_full_path == NULL) {
         status = calculate_program(calculate, pathconfig);
         if (_PyStatus_EXCEPTION(status)) {
@@ -1493,11 +1519,16 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         }
     }
 
+    // 这里进一步获取 program_full_path 的（link）源文件
+    // 因为上面得到的 program_full_path 可能是一个 link（快捷）类型文件
+    // 获取的结果会保存到 calculate->argv0_path
     status = calculate_argv0_path(calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 从上面得到的 argv0_path 或 argv0_path 的父目录中的 pyvenv.cfg 配置文件中（如果存在），读取 `home` 配置项
+    // 如果读取成功，用读取到的 `home` 替换 argv0_path 的值
     /* If a pyvenv.cfg configure file is found,
        argv0_path is overridden with its 'home' variable. */
     status = calculate_read_pyenv(calculate);
@@ -1505,16 +1536,20 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         return status;
     }
 
+    // 解析/定位 Python 标准库所在路径到 calculate->prefix
+    // 注：在 Python 中，prefix 的概念对应的就是标准库路径
     status = calculate_prefix(calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 解析/定位 Python（自定义扩展库之一的）zip 扩展库所在路径到 calculate->zip_path
     status = calculate_zip_path(calculate);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 解析/定位 Python（自定义扩展库之一的）exec 扩展库所在路径到 calculate->exec_prefix
     status = calculate_exec_prefix(calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -1527,6 +1562,7 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
                 "Consider setting $PYTHONHOME to <prefix>[:<exec_prefix>]\n");
     }
 
+    // 解析/计算 Python 库（模块）的导入搜索路径
     if (pathconfig->module_search_path == NULL) {
         status = calculate_module_search_path(calculate, pathconfig);
         if (_PyStatus_EXCEPTION(status)) {
@@ -1594,14 +1630,21 @@ _PyPathConfig_Calculate(_PyPathConfig *pathconfig, const PyConfig *config)
 {
     PyStatus status;
 
+    // 创建路径配置信息解析工具类
     PyCalculatePath calculate;
     memset(&calculate, 0, sizeof(calculate));
 
+    // 初始化路径配置信息解析工具类，即从各个配置源，读取加载和路径相关的配置。具体包括:
+    // * 系统环境变量 $PATH
+    // * 编译宏定义 PYTHONPATH、PREFIX、EXEC_PREFIX、VPATH
+    // * 计算得到的 Python 标准库（相对）路径（lib_python）<platlibdir> / "pythonX.Y"
     status = calculate_init(&calculate, config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
     }
 
+    // 计算获取路径信息配置。具体包括：
+    // * 
     status = calculate_path(&calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;

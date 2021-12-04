@@ -15,7 +15,8 @@
 extern "C" {
 #endif
 
-
+// - 定义: 路径管理对象（全局变量）
+// + 
 _PyPathConfig _Py_path_config = _PyPathConfig_INIT;
 
 
@@ -99,9 +100,11 @@ pathconfig_copy(_PyPathConfig *config, const _PyPathConfig *config2)
 }
 
 
+// 清空（全局）路径管理对象（_Py_path_config）中的数据
 void
 _PyPathConfig_ClearGlobal(void)
-{
+{   // 清除 
+
     PyMemAllocatorEx old_alloc;
     _PyMem_SetDefaultAllocator(PYMEM_DOMAIN_RAW, &old_alloc);
 
@@ -144,7 +147,8 @@ _PyWideStringList_Join(const PyWideStringList *list, wchar_t sep)
 
 static PyStatus
 pathconfig_set_from_config(_PyPathConfig *pathconfig, const PyConfig *config)
-{
+{   // 将 PyConfig 中的和 Path 有关的设定，复制到 pathconfig（_PyPathConfig）
+    
     PyStatus status;
     PyMemAllocatorEx old_alloc;
     _PyMem_SetDefaultAllocator(PYMEM_DOMAIN_RAW, &old_alloc);
@@ -189,9 +193,10 @@ done:
     return status;
 }
 
+// 将（全局）路径管理对象（_Py_path_config）中的数据以 dict 数据类型返回 
 PyObject *
 _PyPathConfig_AsDict(void)
-{
+{   
     PyObject *dict = PyDict_New();
     if (dict == NULL) {
         return NULL;
@@ -264,7 +269,7 @@ fail:
     return NULL;
 }
 
-
+// 将 PyConfig 中的和 Path 有关的设定，写入到（全局）管理对象（_Py_path_config）中
 PyStatus
 _PyConfig_WritePathConfig(const PyConfig *config)
 {
@@ -440,6 +445,7 @@ done:
 }
 
 
+// 初始化 PyConfig 中的，和 Path 有关的设定
 PyStatus
 _PyConfig_InitPathConfig(PyConfig *config, int compute_path_config)
 {
@@ -487,6 +493,7 @@ path_out_of_memory(const char *func)
     _Py_FatalErrorFunc(func, "out of memory");
 }
 
+// 设置（全局）管理对象（_Py_path_config）中的 `module_search_path` 属性
 void
 Py_SetPath(const wchar_t *path)
 {
@@ -526,6 +533,7 @@ Py_SetPath(const wchar_t *path)
 }
 
 
+// 设置（全局）管理对象（_Py_path_config）中的 `home` 属性
 void
 Py_SetPythonHome(const wchar_t *home)
 {
@@ -547,6 +555,7 @@ Py_SetPythonHome(const wchar_t *home)
 }
 
 
+// 设置（全局）管理对象（_Py_path_config）中的 `program_name` 属性
 void
 Py_SetProgramName(const wchar_t *program_name)
 {
@@ -567,6 +576,7 @@ Py_SetProgramName(const wchar_t *program_name)
     }
 }
 
+// 设置（全局）管理对象（_Py_path_config）中的 `program_full_path` 属性
 void
 _Py_SetProgramFullPath(const wchar_t *program_full_path)
 {

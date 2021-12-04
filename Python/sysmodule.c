@@ -1,7 +1,10 @@
 
 /* System module */
+// sys 模块是 Python 最基本、最核心的 built-in 模块。可以理解成是 THE FISRT MOD
+// sys 模块是 fixedup 类型，即不可被替换、重载
 
 /*
+被解释器使用的很多数据信息，都被集中放在 `sys` 模块中
 Various bits of information used by the interpreter are collected in
 module 'sys'.
 Function member:
