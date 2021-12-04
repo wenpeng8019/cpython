@@ -344,7 +344,8 @@ config_init_module_search_paths(PyConfig *config, _PyPathConfig *pathconfig)
 static PyStatus
 pathconfig_init(_PyPathConfig *pathconfig, const PyConfig *config,
                 int compute_path_config)
-{
+{   // @ config_init_pathconfig
+
     PyStatus status;
 
     PyMemAllocatorEx old_alloc;
@@ -375,7 +376,8 @@ done:
 
 static PyStatus
 config_init_pathconfig(PyConfig *config, int compute_path_config)
-{
+{   // @ _PyConfig_InitPathConfig
+
     // 创建一个局部的 _PyPathConfig 对象
     _PyPathConfig pathconfig = _PyPathConfig_INIT;
     PyStatus status;

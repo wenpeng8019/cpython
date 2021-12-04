@@ -24,9 +24,10 @@
  * modules.  Note that prefix and exec_prefix can be the same directory,
  * but for some installations, they are different.
  * 有两个 Python 库目录是必须存在的
- * - prefix，和平台无关的库目录：里面包含都是通用的 .py 和 .pyc 文件
+ * - prefix，和平台无关的库目录：里面包含都是通用的 .py 和 .pyc 文件。
+ *   “和平台无关”是指，这些库、模块都是随 Python 程序一起打包发行的。和 Python 程序是一体的，与当前安装的设备和系统无关。
  * - exec_prefix，和平台相关的库目录：里面存放的是共享库模块
- * 
+ *   “和平台相关”是指，这些库、模块都是在当前设备和系统中独立安装的。和 Python 程序安装包无关。
  *
  * Py_GetPath() carries out separate searches for prefix and exec_prefix.
  * Each search tries a number of different locations until a ``landmark''
@@ -128,6 +129,9 @@ extern "C" {
 #define PATHLEN_ERR() _PyStatus_ERR("path configuration: path too long")
 
 typedef struct {
+
+    // 该成员主要是用于执行 which（calculate_which）处理的
+    // 用于将 program_name 反向解析出 program_full_path
     wchar_t *path_env;                 /* PATH environment variable */
 
     wchar_t *pythonpath_macro;         /* PYTHONPATH macro */
@@ -135,9 +139,14 @@ typedef struct {
     wchar_t *exec_prefix_macro;        /* EXEC_PREFIX macro */
     wchar_t *vpath_macro;              /* VPATH macro */
 
+    // 标准库的相对路径部分
     wchar_t *lib_python;               /* <platlibdir> / "pythonX.Y" */
 
+    // 是否解析到了 prefix（和平台无关的标准库）路径。0 表示没解析到；1 表示解析到了
+    // 注意：该值可以为 -1，表示解析到的标准库路径，是通过本地编译安装（make install）指定的
     int prefix_found;         /* found platform independent libraries? */
+    // 是否解析到了 exec_prefix（和平台相关的共享库）路径。0 表示没解析到；1 表示解析到了
+    // 注意：该值不存在 -1 的情况
     int exec_prefix_found;    /* found the platform dependent libraries? */
 
     int warnings;
@@ -411,7 +420,8 @@ add_exe_suffix(wchar_t **progpath_p)
 static PyStatus
 search_for_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
                   wchar_t *prefix, size_t prefix_len, int *found)
-{
+{   // @ calculate_prefix
+
     PyStatus status;
 
     // 如果设定了系统环境变量 PYTHONHOME，则直接以该设置为准
@@ -434,20 +444,18 @@ search_for_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
         return _PyStatus_OK();
     }
 
-    // 判断 Python 是否是通过（make）编译安装的
-    // make 编译安装的 Python，会在（安装的）Python 程序所在的路径下，创建 /Modules/Setup.local 文件
+    // 判断 Python 是否是通过本地编译安装（make install）的
+    // 本地编译安装的 Python，会在（安装的）Python 程序所在的路径下，创建 /Modules/Setup.local（空）文件作为标识
     /* Check to see if argv0_path is in the build directory
-
        Path: <argv0_path> / <BUILD_LANDMARK define> */
     wchar_t *path = joinpath2(calculate->argv0_path, BUILD_LANDMARK);
     if (path == NULL) {
         return _PyStatus_NO_MEMORY();
     }
-
     int is_build_dir = isfile(path);
     PyMem_RawFree(path);
 
-    // 如果 Python 是通过（make）编译安装的
+    // 如果 Python 是通过本地编译安装（make install）的
     // 此时 prefix = <argv0_path> / <VPATH macro> / Lib
     // 另外，这里会判断 <argv0_path> / <VPATH macro> / Lib 下是否存在 os.py 文件。
     // 这也意味着 os.py 是标准库中的必要模块
@@ -477,6 +485,7 @@ search_for_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
             return status;
         }
         if (module) {
+            // 这里标记为 -1，表示 prefix 是通过本地编译安装（make install）的
             /* BUILD_LANDMARK and LANDMARK found */
             *found = -1;
             return _PyStatus_OK();
@@ -546,7 +555,10 @@ search_for_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
 
 static PyStatus
 calculate_set_stdlib_dir(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
-{
+{   // @ calculate_path
+
+    // 相比于 pathconfig->prefix 设定，pathconfig->stdlib_dir 的设定
+    // 也包括了通过本地编译安装（make install）的标准库路径，即 calculate->prefix_found < 0 的情况
     // Note that, unlike calculate_set_prefix(), here we allow a negative
     // prefix_found.  That means the source tree Lib dir gets used.
     if (!calculate->prefix_found) {
@@ -554,6 +566,7 @@ calculate_set_stdlib_dir(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
     }
     PyStatus status;
     wchar_t *prefix = calculate->prefix;
+    // 例如: "~" 用户主目录
     if (!_Py_isabs(prefix)) {
         prefix = _PyMem_RawWcsdup(prefix);
         if (prefix == NULL) {
@@ -564,6 +577,7 @@ calculate_set_stdlib_dir(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
             return status;
         }
     }
+    // 路径标准化处理（类似于 posixpath.normpath），除去 "." 或 ".." 项
     wchar_t buf[MAXPATHLEN + 1];
     int res = _Py_normalize_path(prefix, buf, Py_ARRAY_LENGTH(buf));
     if (prefix != calculate->prefix) {
@@ -582,7 +596,8 @@ calculate_set_stdlib_dir(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
 
 static PyStatus
 calculate_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
-{
+{   // @ calculate_path
+
     wchar_t prefix[MAXPATHLEN+1];
     memset(prefix, 0, sizeof(prefix));
     size_t prefix_len = Py_ARRAY_LENGTH(prefix);
@@ -617,12 +632,16 @@ calculate_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
 
 static PyStatus
 calculate_set_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
-{
+{   // @ calculate_path
+
     /* Reduce prefix and exec_prefix to their essence,
      * e.g. /usr/local/lib/python1.5 is reduced to /usr/local.
      * If we're loading relative to the build directory,
      * return the compiled-in defaults instead.
      */
+    // 注意：这里不包括 prefix_found < 0 情况
+    // 这就是说，如果解析得到的 calculate->prefix 是通过本地编译安装（make install）的标准库路径
+    // 那么它不会被保存到 pathconfig->prefix 中，（而是会被保存到 pathconfig->stdlib_dir 中）
     if (calculate->prefix_found > 0) {
         wchar_t *prefix = _PyMem_RawWcsdup(calculate->prefix);
         if (prefix == NULL) {
@@ -645,6 +664,7 @@ calculate_set_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
             }
         }
     }
+    // 设置 pathconfig->prefix 为默认值，即编译宏定义 prefix_macro 的值
     else {
         pathconfig->prefix = _PyMem_RawWcsdup(calculate->prefix_macro);
         if (pathconfig->prefix == NULL) {
@@ -805,7 +825,8 @@ search_for_exec_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig,
 
 static PyStatus
 calculate_exec_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
-{
+{   // @ calculate_path
+
     PyStatus status;
     wchar_t exec_prefix[MAXPATHLEN+1];
     memset(exec_prefix, 0, sizeof(exec_prefix));
@@ -853,7 +874,8 @@ calculate_exec_prefix(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
 static PyStatus
 calculate_set_exec_prefix(PyCalculatePath *calculate,
                           _PyPathConfig *pathconfig)
-{
+{   // @ calculate_path
+
     if (calculate->exec_prefix_found > 0) {
         wchar_t *exec_prefix = _PyMem_RawWcsdup(calculate->exec_prefix);
         if (exec_prefix == NULL) {
@@ -1023,7 +1045,8 @@ calculate_program_impl(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
 /* Calculate pathconfig->program_full_path */
 static PyStatus
 calculate_program(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
-{
+{   // @ calculate_path
+
     PyStatus status;
 
     status = calculate_program_impl(calculate, pathconfig);
@@ -1190,7 +1213,8 @@ done:
 static PyStatus
 calculate_argv0_path(PyCalculatePath *calculate,
                      _PyPathConfig *pathconfig)
-{
+{   // @ calculate_path
+
     PyStatus status;
 
     calculate->argv0_path = _PyMem_RawWcsdup(pathconfig->program_full_path);
@@ -1218,7 +1242,8 @@ calculate_argv0_path(PyCalculatePath *calculate,
 
 static PyStatus
 calculate_open_pyenv(PyCalculatePath *calculate, FILE **env_file_p)
-{
+{   // @ calculate_read_pyenv
+
     *env_file_p = NULL;
 
     const wchar_t *env_cfg = L"pyvenv.cfg";
@@ -1271,7 +1296,8 @@ calculate_open_pyenv(PyCalculatePath *calculate, FILE **env_file_p)
    Write the 'home' variable of pyvenv.cfg into calculate->argv0_path. */
 static PyStatus
 calculate_read_pyenv(PyCalculatePath *calculate)
-{
+{   // @ calculate_path
+
     PyStatus status;
     FILE *env_file = NULL;
 
@@ -1304,7 +1330,8 @@ calculate_read_pyenv(PyCalculatePath *calculate)
 
 static PyStatus
 calculate_zip_path(PyCalculatePath *calculate)
-{
+{   // @ calculate_path
+
     PyStatus res;
 
     /* Path: <platlibdir> / "pythonXY.zip" */
@@ -1508,10 +1535,11 @@ calculate_free(PyCalculatePath *calculate)
 
 static PyStatus
 calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
-{
+{   // @ _PyPathConfig_Calculate
+
     PyStatus status;
 
-    // 计算获取 Python 程序全路径名
+    // 解析获取 Python 程序全路径名 `program_full_path`
     if (pathconfig->program_full_path == NULL) {
         status = calculate_program(calculate, pathconfig);
         if (_PyStatus_EXCEPTION(status)) {
@@ -1519,15 +1547,15 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         }
     }
 
-    // 这里进一步获取 program_full_path 的（link）源文件
-    // 因为上面得到的 program_full_path 可能是一个 link（快捷）类型文件
-    // 获取的结果会保存到 calculate->argv0_path
+    // 这里进一步解析 `program_full_path` 的（link）源文件
+    // 因为上面得到的 `program_full_path` 可能是一个（link）链接文件
+    // 得到的结果被称为 `argv0_path`，会保存到 calculate->argv0_path
     status = calculate_argv0_path(calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
-    // 从上面得到的 argv0_path 或 argv0_path 的父目录中的 pyvenv.cfg 配置文件中（如果存在），读取 `home` 配置项
+    // 在（上面得到的）`argv0_path` 路径、或它的父目录中，如果存在 pyvenv.cfg 配置文件，则读取其中的 `home` 配置项
     // 如果读取成功，用读取到的 `home` 替换 argv0_path 的值
     /* If a pyvenv.cfg configure file is found,
        argv0_path is overridden with its 'home' variable. */
@@ -1536,20 +1564,19 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         return status;
     }
 
-    // 解析/定位 Python 标准库所在路径到 calculate->prefix
-    // 注：在 Python 中，prefix 的概念对应的就是标准库路径
+    // 解析获取 Python（和平台无关的）标准库所在路径 `prefix`。并将其保存到 calculate->prefix
     status = calculate_prefix(calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
-    // 解析/定位 Python（自定义扩展库之一的）zip 扩展库所在路径到 calculate->zip_path
+    // 解析获取 Python（自定义扩展库之一的）zip 扩展库所在路径到 calculate->zip_path
     status = calculate_zip_path(calculate);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
-    // 解析/定位 Python（自定义扩展库之一的）exec 扩展库所在路径到 calculate->exec_prefix
+    // 解析获取 Python（和平台相关的）共享库所在路径 `exec_prefix`。并将其保存到 calculate->exec_prefix
     status = calculate_exec_prefix(calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -1562,7 +1589,7 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
                 "Consider setting $PYTHONHOME to <prefix>[:<exec_prefix>]\n");
     }
 
-    // 解析/计算 Python 库（模块）的导入搜索路径
+    // 解析计算 Python 库（模块）的导入搜索路径
     if (pathconfig->module_search_path == NULL) {
         status = calculate_module_search_path(calculate, pathconfig);
         if (_PyStatus_EXCEPTION(status)) {
@@ -1570,6 +1597,13 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         }
     }
 
+    // 将前面解析得到的 calculate->prefix 值，设置（写回）到 pathconfig->stdlib_dir
+    // 事实上，calculate->prefix 更应该被命名为 "calculate->stdlib_dir"，
+    // 因为它的含义和 stdlib_dir 是一致的，相反和 prefix 的概念则是不匹配的
+    // 具体可以理解为：
+    // > 如果存在本地编译安装（make install）的标准库，则将 stdlib_dir 指向该库（路径）
+    // > 否则将 stdlib_dir 指向由 pathconfig->prefix 设定的库路径
+    // 总的来说，stdlib_dir 是最终目的，而 prefix 则是用于设定 stdlib_dir 的一个（补充备选）方案
     if (pathconfig->stdlib_dir == NULL) {
         /* This must be done *before* calculate_set_prefix() is called. */
         status = calculate_set_stdlib_dir(calculate, pathconfig);
@@ -1578,6 +1612,11 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         }
     }
 
+    // 用前面解析得到的 calculate->prefix 值，来设置（写回）pathconfig->prefix
+    // ! 如果前面解析得到的 calculate->prefix 值，是通过本地编译安装（make install）的标准库
+    //   则这里设置（写回）到 pathconfig->prefix 中的值，会变成编译宏定义 prefix_macro 的值（即默认值）
+    // ! 前面解析得到的 calculate->prefix 是标准库的实际全路径，即 "<prefix>/<lib_python>/"
+    //   而这里设置（写回）到 pathconfig->prefix 中的值，则是去除 <lib_python>（相对路径）部分的 <prefix> 值
     if (pathconfig->prefix == NULL) {
         status = calculate_set_prefix(calculate, pathconfig);
         if (_PyStatus_EXCEPTION(status)) {
@@ -1585,6 +1624,9 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         }
     }
 
+    // 将前面解析得到的 calculate->exec_prefix 值，设置（写回）到 pathconfig->exec_prefix
+    // ! 前面解析得到的 calculate->exec_prefix 是共享库的实际全路径，即 "<exec_prefix>/<lib_python>/lib-dynload/"
+    //   而这里设置（写回）到 pathconfig->exec_prefix 中的值，则是去除 <lib_python>/lib-dynload（相对路径）部分的 <exec_prefix> 值
     if (pathconfig->exec_prefix == NULL) {
         status = calculate_set_exec_prefix(calculate, pathconfig);
         if (_PyStatus_EXCEPTION(status)) {
@@ -1643,7 +1685,7 @@ _PyPathConfig_Calculate(_PyPathConfig *pathconfig, const PyConfig *config)
         goto done;
     }
 
-    // 计算获取路径信息配置。具体包括：
+    // 解析获取路径信息配置。具体包括：
     // * 
     status = calculate_path(&calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {

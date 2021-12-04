@@ -1978,7 +1978,9 @@ PyImport_ReloadModule(PyObject *m)
    A dummy list ["__doc__"] is passed as the 4th argument so that
    e.g. PyImport_Import(PyUnicode_FromString("win32com.client.gencache"))
    will return <module "gencache"> instead of <module "win32com">. */
-
+// 高仿 import 功能，也就是尽量精准的仿真 "import" 语法。
+// 这里调用的是当前全局 builtins 的 __import__() 函数，
+// 这意味着，在当前环境中安装的各种 hooks 都将生效。
 PyObject *
 PyImport_Import(PyObject *module_name)
 {
@@ -2008,6 +2010,7 @@ PyImport_Import(PyObject *module_name)
     }
 
     /* Get the builtins from current globals */
+    // 从全局变量中获取 builtins 对象
     globals = PyEval_GetGlobals();
     if (globals != NULL) {
         Py_INCREF(globals);
@@ -2015,6 +2018,7 @@ PyImport_Import(PyObject *module_name)
         if (builtins == NULL)
             goto err;
     }
+    // 如果全局变量中没有 builtins 对象，则使用标准 builtins 对象，和伪全局对象
     else {
         /* No globals -- use standard builtins, and fake globals */
         builtins = PyImport_ImportModuleLevel("builtins",
@@ -2028,6 +2032,7 @@ PyImport_Import(PyObject *module_name)
     }
 
     /* Get the __import__ function from the builtins */
+    // 获取 builtins 对象的 __import__ 方法
     if (PyDict_Check(builtins)) {
         import = PyObject_GetItem(builtins, import_str);
         if (import == NULL) {
@@ -2042,6 +2047,7 @@ PyImport_Import(PyObject *module_name)
     /* Call the __import__ function with the proper argument list
        Always use absolute import here.
        Calling for side-effect of import. */
+    // 触发 builtins 对象的 __import__ 方法
     r = PyObject_CallFunction(import, "OOOOi", module_name, globals,
                               globals, from_list, 0, NULL);
     if (r == NULL)

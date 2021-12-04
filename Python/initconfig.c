@@ -2153,7 +2153,7 @@ config_init_import(PyConfig *config, int compute_path_config)
         return status;
     }
 
-    // 初始化（用于调试的）use_frozen_modules 选项
+    // 初始化 use_frozen_modules 选项
     /* -X frozen_modules=[on|off] */
     if (config->use_frozen_modules < 0) {
         const wchar_t *value = config_get_xoption_value(config, L"frozen_modules");
