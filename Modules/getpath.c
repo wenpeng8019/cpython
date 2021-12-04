@@ -150,6 +150,8 @@ typedef struct {
     int exec_prefix_found;    /* found the platform dependent libraries? */
 
     int warnings;
+    // 系统环境变量 $PYTHONPATH 的值
+    // 注意它和 pythonpath_macro 的区分，pythonpath_macro 是编译宏定义的 PYTHONPATH macro
     const wchar_t *pythonpath_env;
     const wchar_t *platlibdir;
 
