@@ -796,7 +796,10 @@ error:
 
 static PyStatus
 pycore_interp_init(PyThreadState *tstate)
-{
+{   // @ pyinit_config
+    // @ new_interpreter
+    // 解释器初始化
+
     PyInterpreterState *interp = tstate->interp;
     PyStatus status;
     PyObject *sysmod = NULL;
@@ -859,12 +862,15 @@ pyinit_config(_PyRuntimeState *runtime,
               PyThreadState **tstate_p,
               const PyConfig *config)
 {   // @ pyinit_core
+    // 用指定的 `PyConfig` 配置，完成 Python 系统框架内核初始化处理
 
+    // 初始化运行时实体
     PyStatus status = pycore_init_runtime(runtime, config);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 创建解释器
     PyThreadState *tstate;
     status = pycore_create_interpreter(runtime, config, &tstate);
     if (_PyStatus_EXCEPTION(status)) {
@@ -872,12 +878,14 @@ pyinit_config(_PyRuntimeState *runtime,
     }
     *tstate_p = tstate;
 
+    // 执行解释器初始化处理
     status = pycore_interp_init(tstate);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
     /* Only when we get here is the runtime core fully initialized */
+    // 标记 Python 系统框架内核初始化完成
     runtime->core_initialized = 1;
     return _PyStatus_OK();
 }
@@ -1020,9 +1028,12 @@ pyinit_core(_PyRuntimeState *runtime,
         return status;
     }
 
-    // 复制（入参）src_config 到局部变量
+    // 创建默认 `PyConfig` 对象
     PyConfig config;
     PyConfig_InitPythonConfig(&config);
+
+    // 用指定的 `PyConfig` 对象重载（覆盖）默认的 `PyConfig` 对象
+    // + 事实上，这使得前面的初始化，即用默认值进行赋值的操作，显得没有必要了
     status = _PyConfig_Copy(&config, src_config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
@@ -1030,15 +1041,23 @@ pyinit_core(_PyRuntimeState *runtime,
 
     // Read the configuration, but don't compute the path configuration
     // (it is computed in the main init).
+    // 从各个配置信息源加载 `PyConfig` 配置（重载 or 补充？）
     // 这里的参数 compute_path_config 被指定为 0，即此时不解析和 path 相关的配置
     status = _PyConfig_Read(&config, /* compute_path_config */0);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
     }
 
+    // 首次执行 Python 系统框架内核初始化处理
     if (!runtime->core_initialized) {
+        
+        // 用指定的 `PyConfig` 配置，完成 Python 系统框架内核初始化处理
+        // * 初始化运行时实体
+        // * 创建并初始化解释器
+        // * 标记初始化完成
         status = pyinit_config(runtime, tstate_p, &config);
     }
+    // 之前执行过 Python 系统框架内核初始化处理
     else {
         status = pyinit_core_reconfigure(runtime, tstate_p, &config);
     }
@@ -1221,9 +1240,9 @@ static PyStatus
 pyinit_main(PyThreadState *tstate)
 {   // @ Py_InitializeFromConfig
     // @ _Py_InitializeMain
-    // 初始化 Python 运行环境
+    // 初始化 Python 程序运行环境
 
-    // 验证 Python 内核已经初始化完成，即执行过 pyinit_core 处理
+    // 验证 Python 系统架构内核已经初始化完成，即执行过 pyinit_core 处理
     PyInterpreterState *interp = tstate->interp;
     if (!interp->runtime->core_initialized) {
         return _PyStatus_ERR("runtime core not initialized");
@@ -1278,13 +1297,16 @@ Py_InitializeFromConfig(const PyConfig *config)
     _PyRuntimeState *runtime = &_PyRuntime;
 
     // 初始化 Python 系统框架内核
+    // + 包括读取构造配置信息、创建动态运行时对象、和解释器
     PyThreadState *tstate = NULL;
     status = pyinit_core(runtime, config, &tstate);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
-    // 获取初始化完成并最终应用到解释器的配置信息
+    // 初始化 Python 程序运行环境
+    // + 包括程序运行用到的基本库的导入和设置
+    //   例如：库导入路径、stdin｜out｜err、错误、警告处理模块等
     config = _PyInterpreterState_GetConfig(tstate->interp);
     if (config->_init_main) {
         status = pyinit_main(tstate);
@@ -2166,6 +2188,11 @@ add_main_module(PyInterpreterState *interp)
 
     // 在 `__main__` 模块域下，将 `importlib` 模块的 `BuiltinImporter` 方法
     // 绑定到 `__loader__` 变量上
+    // `__main__` 模块有些特殊。imp.is_builtin("__main__") 会返回 false
+    // 也就是它不认为 `__main__` 是一个 `builtin` 模块。但是 `__main__` 模块依然
+    // 会像其他 `builtin` 模块一样，将 `importlib` 模块的 `BuiltinImporter` 方法
+    // 绑定到 `__loader__` 变量上。且在之后的启动过程中，`__main__` 模块还会被初始化
+    // 很多其他的初始化值。
     /* Main is a little special - imp.is_builtin("__main__") will return
      * False, but BuiltinImporter is still the most appropriate initial
      * setting for its __loader__ attribute. A more suitable value will
