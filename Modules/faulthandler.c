@@ -1348,7 +1348,9 @@ faulthandler_init_enable(void)
 
 PyStatus
 _PyFaulthandler_Init(int enable)
-{
+{   // @ init_interp_main
+
+
 #ifdef FAULTHANDLER_USE_ALT_STACK
     memset(&stack, 0, sizeof(stack));
     stack.ss_flags = 0;

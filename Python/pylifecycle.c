@@ -207,7 +207,8 @@ init_importlib(PyThreadState *tstate, PyObject *sysmod)
 
 static PyStatus
 init_importlib_external(PyThreadState *tstate)
-{
+{   // @ init_interp_main
+
     PyObject *value;
     value = PyObject_CallMethod(tstate->interp->importlib,
                                 "_install_external_importers", "");
@@ -1029,8 +1030,8 @@ pyinit_core(_PyRuntimeState *runtime,
 
     // Read the configuration, but don't compute the path configuration
     // (it is computed in the main init).
-    // 这里的参数 compute_path_config 被指定为 0，像上面注释说的，此时不解析和 path 相关的配置
-    status = _PyConfig_Read(&config, 0);
+    // 这里的参数 compute_path_config 被指定为 0，即此时不解析和 path 相关的配置
+    status = _PyConfig_Read(&config, /* compute_path_config */0);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
     }
@@ -1068,22 +1069,30 @@ static PyStatus
 init_interp_main(PyThreadState *tstate)
 {   // @ pyinit_main
     // @ new_interpreter
+    // 初始化解释器的运行环境
+    // + 主要是导入并初始化一些必要的库和模块
 
     extern void _PyThread_debug_deprecation(void);
 
     assert(!_PyErr_Occurred(tstate));
 
     PyStatus status;
+
+    // 获取解释器类型、解释器对象、运行配置信息
     int is_main_interp = _Py_IsMainInterpreter(tstate->interp);
     PyInterpreterState *interp = tstate->interp;
     const PyConfig *config = _PyInterpreterState_GetConfig(interp);
 
+    // 对于 freeze importlib 模式，直接标记为初始化完成并返回
+    // + freeze 模式不支持库导入机制。这意味着，该 Python 程序无法使用外部扩展库，甚至也无法使用标准库。
+    //   由于不支持导入库，所以这里无需对初始化一些必要的库和模块，因此这里会直接返回
     if (!config->_install_importlib) {
         /* Special mode for freeze_importlib: run with no import system
          *
          * This means anything which needs support from extension modules
          * or pure Python code in the standard library won't work.
          */
+        // (对于主解释器) 直接将其运行时实体标记为初始化完成
         if (is_main_interp) {
             interp->runtime->initialized = 1;
         }
@@ -1091,20 +1100,26 @@ init_interp_main(PyThreadState *tstate)
     }
 
     // Initialize the import-related configuration.
+    // 完成导入库路径配置信息初始化，也就是解析和 path 相关的配置
+    // + 之前执行的 pyinit_core 处理，在执行 _PyConfig_Read 加载配置信息时，没有对 path 相关的配置进行解析
     status = _PyConfig_InitImportConfig(&interp->config);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 将从各个配置源解析得到的最终配置状态，同步更新到各个相关数据管理模块
     if (interpreter_update_config(tstate, 1) < 0) {
         return _PyStatus_ERR("failed to update the Python config");
     }
 
+    // 触发 `importlib` 模块的 `_install_external_importers` 方法；
+    // 以及执行 _PyImportZip_Init 处理，即 zip 导入机制初始化处理
     status = init_importlib_external(tstate);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // (对于主解释器) 执行失败处理机制（SIGSTK）初始化
     if (is_main_interp) {
         /* initialize the faulthandler module */
         status = _PyFaulthandler_Init(config->faulthandler);
@@ -1113,11 +1128,13 @@ init_interp_main(PyThreadState *tstate)
         }
     }
 
+    // 执行字符集编码初始化
     status = _PyUnicode_InitEncodings(tstate);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // (对于主解释器) 初始化信号处理接口
     if (is_main_interp) {
         if (_PySignal_Init(config->install_signal_handlers) < 0) {
             return _PyStatus_ERR("can't initialize signals");
@@ -1128,23 +1145,29 @@ init_interp_main(PyThreadState *tstate)
         }
     }
 
+    // 初始化创建 `sys` 模块的 stdin/stdout/stderr  对象
     status = init_sys_streams(tstate);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 将 `io` 模块的 open 方法作为（映射为）`builtins` 模块的 open 方法 
     status = init_set_builtins_open();
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // 创建并初始化 Python 程序的 `__main__` 模块
     status = add_main_module(interp);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
 
+    // (对于主解释器) 标记初始化完成
     if (is_main_interp) {
+
         /* Initialize warnings. */
+        // (根据需要) 导入 `warnings` 模块
         PyObject *warnoptions = PySys_GetObject("warnoptions");
         if (warnoptions != NULL && PyList_Size(warnoptions) > 0)
         {
@@ -1156,9 +1179,11 @@ init_interp_main(PyThreadState *tstate)
             Py_XDECREF(warnings_module);
         }
 
+        // 标记初始化完成
         interp->runtime->initialized = 1;
     }
 
+    // (根据需要) 初始化 site 导入机制
     if (config->site_import) {
         status = init_import_site();
         if (_PyStatus_EXCEPTION(status)) {
@@ -1195,16 +1220,34 @@ init_interp_main(PyThreadState *tstate)
 static PyStatus
 pyinit_main(PyThreadState *tstate)
 {   // @ Py_InitializeFromConfig
+    // @ _Py_InitializeMain
+    // 初始化 Python 运行环境
 
+    // 验证 Python 内核已经初始化完成，即执行过 pyinit_core 处理
     PyInterpreterState *interp = tstate->interp;
     if (!interp->runtime->core_initialized) {
         return _PyStatus_ERR("runtime core not initialized");
     }
 
+    // 如果之前完成过 Python 运行环境的初始化，重新初始化配置状态
     if (interp->runtime->initialized) {
         return pyinit_main_reconfigure(tstate);
     }
 
+    // 初始化解释器的运行环境。具体包括
+    // * 完成（之前未完成的）导入库路径配置信息初始化
+    // * 将最终配置状态信息，同步更新到各个相关数据管理模块
+    // * 触发 `importlib` 模块的 `_install_external_importers` 方法
+    // * 执行 zip 导入机制初始化处理（_PyImportZip_Init）
+    // * 失败处理机制（SIGSTK）初始化
+    // * 执行字符集编码初始化
+    // * 初始化信号处理接口
+    // * 初始化创建 `sys` 模块的 stdin/stdout/stderr  对象
+    // * 将 `io` 模块的 open 方法作为（映射为）`builtins` 模块的 open 方法
+    // * 创建并初始化 Python 程序的 `__main__` 模块
+    // * (根据需要) 导入 `warnings` 模块
+    // * 标记初始化完成
+    // * (根据需要) 初始化 site 导入机制
     PyStatus status = init_interp_main(tstate);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -1215,20 +1258,26 @@ pyinit_main(PyThreadState *tstate)
 
 PyStatus
 Py_InitializeFromConfig(const PyConfig *config)
-{
+{   // @ extern
+    // @ pymain_init
+    // @ Py_InitializeEx
+    // @ Py_FrozenMain
+    // 根据 PyConfig 配置信息，来初始化 Python 系统框架
+
     if (config == NULL) {
         return _PyStatus_ERR("initialization config is NULL");
     }
 
     PyStatus status;
 
+    // 获取（初始化）Python 动态运行时实体（单例）
     status = _PyRuntime_Initialize();
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
     _PyRuntimeState *runtime = &_PyRuntime;
 
-    // 初始化 Python 内核
+    // 初始化 Python 系统框架内核
     PyThreadState *tstate = NULL;
     status = pyinit_core(runtime, config, &tstate);
     if (_PyStatus_EXCEPTION(status)) {
@@ -1237,8 +1286,6 @@ Py_InitializeFromConfig(const PyConfig *config)
 
     // 获取初始化完成并最终应用到解释器的配置信息
     config = _PyInterpreterState_GetConfig(tstate->interp);
-
-    // 
     if (config->_init_main) {
         status = pyinit_main(tstate);
         if (_PyStatus_EXCEPTION(status)) {
@@ -1286,13 +1333,19 @@ Py_Initialize(void)
 
 PyStatus
 _Py_InitializeMain(void)
-{
+{   // @ extern
+
+    // 初始化动态运行时实体
     PyStatus status = _PyRuntime_Initialize();
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }
+
+    // 获取动态运行时线程
     _PyRuntimeState *runtime = &_PyRuntime;
     PyThreadState *tstate = _PyRuntimeState_GetThreadState(runtime);
+
+    // 初始化主程序
     return pyinit_main(tstate);
 }
 
@@ -1720,7 +1773,12 @@ finalize_interp_delete(PyInterpreterState *interp)
 
 int
 Py_FinalizeEx(void)
-{
+{   // @ extern
+    // @ Py_Finalize
+    // @ Py_Exit
+    // @ Py_RunMain
+    // @ Py_FrozenMain
+
     int status = 0;
 
     _PyRuntimeState *runtime = &_PyRuntime;
@@ -2071,13 +2129,19 @@ Py_EndInterpreter(PyThreadState *tstate)
 
 static PyStatus
 add_main_module(PyInterpreterState *interp)
-{
+{   // @ init_interp_main
+    // 创建并初始化 Python 程序的 `__main__` 模块
+
     PyObject *m, *d, *loader, *ann_dict;
+
+    // 新建 `__main__` 模块 
     m = PyImport_AddModule("__main__");
     if (m == NULL)
         return _PyStatus_ERR("can't create __main__ module");
 
     d = PyModule_GetDict(m);
+
+    // 在 `__main__` 模块域下，添加 `__annotations__`（批注）对象
     ann_dict = PyDict_New();
     if ((ann_dict == NULL) ||
         (PyDict_SetItemString(d, "__annotations__", ann_dict) < 0)) {
@@ -2085,6 +2149,7 @@ add_main_module(PyInterpreterState *interp)
     }
     Py_DECREF(ann_dict);
 
+    // 在 `__main__` 模块域下，导入 `__builtins__` 模块
     if (_PyDict_GetItemStringWithError(d, "__builtins__") == NULL) {
         if (PyErr_Occurred()) {
             return _PyStatus_ERR("Failed to test __main__.__builtins__");
@@ -2099,6 +2164,8 @@ add_main_module(PyInterpreterState *interp)
         Py_DECREF(bimod);
     }
 
+    // 在 `__main__` 模块域下，将 `importlib` 模块的 `BuiltinImporter` 方法
+    // 绑定到 `__loader__` 变量上
     /* Main is a little special - imp.is_builtin("__main__") will return
      * False, but BuiltinImporter is still the most appropriate initial
      * setting for its __loader__ attribute. A more suitable value will
@@ -2322,24 +2389,29 @@ error:
 /* Set builtins.open to io.open */
 static PyStatus
 init_set_builtins_open(void)
-{
+{   // @ init_interp_main
+
     PyObject *iomod = NULL, *wrapper;
     PyObject *bimod = NULL;
     PyStatus res = _PyStatus_OK();
 
+    // 导入 `io` 模块
     if (!(iomod = PyImport_ImportModule("io"))) {
         goto error;
     }
 
+    // 导入 `builtins` 模块
     if (!(bimod = PyImport_ImportModule("builtins"))) {
         goto error;
     }
 
+    // 获取 `io` 模块的 open 方法
     if (!(wrapper = PyObject_GetAttrString(iomod, "open"))) {
         goto error;
     }
 
     /* Set builtins.open */
+    // 将 `io` 模块的 open 方法，绑定（添加）到 `builtins` 模块
     if (PyObject_SetAttrString(bimod, "open", wrapper) == -1) {
         Py_DECREF(wrapper);
         goto error;
@@ -2360,7 +2432,9 @@ done:
 /* Create sys.stdin, sys.stdout and sys.stderr */
 static PyStatus
 init_sys_streams(PyThreadState *tstate)
-{
+{   // @ init_interp_main
+    // 创建 `sys` 模块的 stdin/stdout/stderr  对象
+
     PyObject *iomod = NULL;
     PyObject *std = NULL;
     int fd;
@@ -2381,9 +2455,12 @@ init_sys_streams(PyThreadState *tstate)
     }
 #endif
 
+    // 导入 `io` 模块
     if (!(iomod = PyImport_ImportModule("io"))) {
         goto error;
     }
+
+    // 创建/设置 sys.stdin 对象
 
     /* Set sys.stdin */
     fd = fileno(stdin);
@@ -2400,6 +2477,8 @@ init_sys_streams(PyThreadState *tstate)
     _PySys_SetObjectId(&PyId_stdin, std);
     Py_DECREF(std);
 
+    // 创建/设置 sys.stdout 对象
+
     /* Set sys.stdout */
     fd = fileno(stdout);
     std = create_stdio(config, iomod, fd, 1, "<stdout>",
@@ -2410,6 +2489,8 @@ init_sys_streams(PyThreadState *tstate)
     PySys_SetObject("__stdout__", std);
     _PySys_SetObjectId(&PyId_stdout, std);
     Py_DECREF(std);
+
+    // 创建/设置 sys.stderr 对象
 
 #if 1 /* Disable this if you have trouble debugging bootstrap stuff */
     /* Set sys.stderr, replaces the preliminary stderr */

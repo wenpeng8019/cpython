@@ -8,14 +8,26 @@ extern "C" {
 #  error "this header requires Py_BUILD_CORE define"
 #endif
 
+// 模块对象（基）类
 typedef struct {
+
+    // 对象管理链表指针
     PyObject_HEAD
+
+    // 模块域下的数据对象集合
     PyObject *md_dict;
+
     struct PyModuleDef *md_def;
+
     void *md_state;
+
+    // 引用了该模块的对象的指针
     PyObject *md_weaklist;
+
+    // 模块命名
     // for logging purposes after md_dict is cleared
     PyObject *md_name;
+
 } PyModuleObject;
 
 static inline PyModuleDef* _PyModule_GetDef(PyObject *mod) {

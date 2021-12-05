@@ -2235,6 +2235,7 @@ _Py_check_xoptions(const PyWideStringList *xoptions, const wchar_t **names)
 static PyStatus
 config_read(PyConfig *config, int compute_path_config)
 {   // @ _PyConfig_Read
+
     PyStatus status;
     const PyPreConfig *preconfig = &_PyRuntime.preconfig;
 
@@ -3062,7 +3063,10 @@ PyConfig_SetWideStringList(PyConfig *config, PyWideStringList *list,
    The only side effects are to modify config and to call _Py_SetArgcArgv(). */
 PyStatus
 _PyConfig_Read(PyConfig *config, int compute_path_config)
-{
+{   // extern
+    // pyinit_core(config, 0)
+    // PyConfig_Read(config, 1)
+
     PyStatus status;
 
     //（如果之前没执行过 `PreConfig` 配置）先执行 `PreConfig` 配置

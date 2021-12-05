@@ -33,9 +33,12 @@ extern "C" {
 
 static PyStatus
 pymain_init(const _PyArgv *args)
-{
+{   // @ pymain_main
+    // 加载程序执行参数、构造系统运行配置，完成 Python 系统框架初始化
+
     PyStatus status;
 
+    // 初始化动态运行时实体
     status = _PyRuntime_Initialize();
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -70,7 +73,7 @@ pymain_init(const _PyArgv *args)
         goto done;
     }
 
-    // 用  PyConfig 配置信息，来初始化 Python 的运行环境
+    // 用 PyConfig 配置信息，来初始化 Python 系统框架
     status = Py_InitializeFromConfig(&config);
     if (_PyStatus_EXCEPTION(status)) {
         goto done;
@@ -191,7 +194,9 @@ pymain_sys_path_add_path0(PyInterpreterState *interp, PyObject *path0)
 
 static void
 pymain_header(const PyConfig *config)
-{
+{   // @ pymain_run_python
+    //（运行 Python 程序前，向 stdin）打印 Python 头信息：版本、版权
+
     if (config->quiet) {
         return;
     }
@@ -209,7 +214,9 @@ pymain_header(const PyConfig *config)
 
 static void
 pymain_import_readline(const PyConfig *config)
-{
+{   // @ pymain_run_python
+    //（根据需要）默认导入 `readline` 模块
+
     if (config->isolated) {
         return;
     }
@@ -232,7 +239,8 @@ pymain_import_readline(const PyConfig *config)
 
 static int
 pymain_run_command(wchar_t *command)
-{
+{   // @ pymain_run_python
+
     PyObject *unicode, *bytes;
     int ret;
 
@@ -265,7 +273,8 @@ error:
 
 static int
 pymain_run_module(const wchar_t *modname, int set_argv0)
-{
+{   // @ pymain_run_python
+
     PyObject *module, *runpy, *runmodule, *runargs, *result;
     if (PySys_Audit("cpython.run_module", "u", modname) < 0) {
         return pymain_exit_err_print();
@@ -317,7 +326,8 @@ pymain_run_module(const wchar_t *modname, int set_argv0)
 static int
 pymain_run_file_obj(PyObject *program_name, PyObject *filename,
                     int skip_source_first_line)
-{
+{   // @ pymain_run_file
+
     if (PySys_Audit("cpython.run_file", "O", filename) < 0) {
         return pymain_exit_err_print();
     }
@@ -364,7 +374,8 @@ pymain_run_file_obj(PyObject *program_name, PyObject *filename,
 
 static int
 pymain_run_file(const PyConfig *config)
-{
+{   // @ pymain_run_python
+
     PyObject *filename = PyUnicode_FromWideChar(config->run_filename, -1);
     if (filename == NULL) {
         PyErr_Print();
@@ -387,7 +398,8 @@ pymain_run_file(const PyConfig *config)
 
 static int
 pymain_run_startup(PyConfig *config, int *exitcode)
-{
+{   // @ pymain_run_stdin
+
     int ret;
     if (!config->use_environment) {
         return 0;
@@ -447,7 +459,9 @@ error:
    Return 0 otherwise. */
 static int
 pymain_run_interactive_hook(int *exitcode)
-{
+{   // @ pymain_run_stdin
+    // @ pymain_repl
+
     PyObject *sys, *hook, *result;
     sys = PyImport_ImportModule("sys");
     if (sys == NULL) {
@@ -482,7 +496,8 @@ error:
 
 static int
 pymain_run_stdin(PyConfig *config)
-{
+{   // @ pymain_run_python
+
     if (stdin_is_interactive(config)) {
         config->inspect = 0;
         Py_InspectFlag = 0; /* do exit on SystemExit */
@@ -514,14 +529,17 @@ pymain_run_stdin(PyConfig *config)
 
 static void
 pymain_repl(PyConfig *config, int *exitcode)
-{
+{   // @ pymain_run_python
+
     /* Check this environment variable at the end, to give programs the
        opportunity to set it from Python. */
+    // 最后一次获取系统环境变量 $PYTHONINSPECT 的值。也就是允许 Python 程序的运行的过程中，设置该环境变量
     if (!config->inspect && _Py_GetEnv(config->use_environment, "PYTHONINSPECT")) {
         config->inspect = 1;
         Py_InspectFlag = 1;
     }
 
+    // 如果不需要执行 pymain_run_interactive_hook 处理，则直接返回
     if (!(config->inspect && stdin_is_interactive(config) && config_run_code(config))) {
         return;
     }
@@ -540,13 +558,23 @@ pymain_repl(PyConfig *config, int *exitcode)
 
 static void
 pymain_run_python(int *exitcode)
-{
+{   // @ Py_RunMain
+    // 运行 python 程序，并返回运行退出码
+
+    // 获取解释器
     PyInterpreterState *interp = _PyInterpreterState_GET();
+
     /* pymain_run_stdin() modify the config */
+
+    // 获取配置信息（包括要运行的 Python 程序信息）
     PyConfig *config = (PyConfig*)_PyInterpreterState_GetConfig(interp);
 
+    // 如果运行的是 Python 脚本文件
+    // 这里的 filename 是一个包（目录、或 zip 文件），里面含有 __main__.py 文件
+    // 同时，该包会作为库导入的入口之一，将其添加到 sys.path
     PyObject *main_importer_path = NULL;
     if (config->run_filename != NULL) {
+
         /* If filename is a package (ex: directory or ZIP file) which contains
            __main__.py, main_importer_path is set to filename and will be
            prepended to sys.path.
@@ -557,13 +585,15 @@ pymain_run_python(int *exitcode)
             return;
         }
     }
-
     if (main_importer_path != NULL) {
         if (pymain_sys_path_add_path0(interp, main_importer_path) < 0) {
             goto error;
         }
     }
     else if (!config->isolated) {
+
+        // 其他情况下，将 "当前运行路径" 作为库导入的入口之一，将其添加到 sys.path
+
         PyObject *path0 = NULL;
         int res = _PyPathConfig_ComputeSysPath0(&config->argv, &path0);
         if (res < 0) {
@@ -579,7 +609,10 @@ pymain_run_python(int *exitcode)
         }
     }
 
+    // 打印 Python 头信息：版本、版权
     pymain_header(config);
+
+    // （根据需要）默认导入 `readline` 模块
     pymain_import_readline(config);
 
     if (config->run_command) {
@@ -613,7 +646,10 @@ done:
 
 static void
 pymain_free(void)
-{
+{   // @ Py_RunMain
+    // @ pymain_main
+    // @ pymain_exit_error
+
     _PyImport_Fini2();
 
     /* Free global variables which cannot be freed in Py_Finalize():
@@ -629,7 +665,8 @@ pymain_free(void)
 
 static int
 exit_sigint(void)
-{
+{   // @ Py_RunMain
+
     /* bpo-1054041: We need to exit via the
      * SIG_DFL handler for SIGINT if KeyboardInterrupt went unhandled.
      * If we don't, a calling process such as a shell may not know
@@ -655,30 +692,39 @@ exit_sigint(void)
 
 static void _Py_NO_RETURN
 pymain_exit_error(PyStatus status)
-{
+{   // @ pymain_main
+    // Python 系统框架在初始化过程中，出现错误
+
     if (_PyStatus_IS_EXIT(status)) {
         /* If it's an error rather than a regular exit, leave Python runtime
            alive: Py_ExitStatusException() uses the current exception and use
            sys.stdout in this case. */
         pymain_free();
     }
+
     Py_ExitStatusException(status);
 }
 
 
 int
 Py_RunMain(void)
-{
-    int exitcode = 0;
+{   // @ extern
+    // @ pymain_main
+    // 运行 python 主程序
 
+    // 运行 python 程序，并返回运行退出码
+    int exitcode = 0;
     pymain_run_python(&exitcode);
 
+    // 完成 Python 系统框架的退出流程处理
+    // 包括发信号、等待退出等操作
     if (Py_FinalizeEx() < 0) {
         /* Value unlikely to be confused with a non-error exit status or
            other special meaning */
         exitcode = 120;
     }
 
+    // 执行系统资源析构处理
     pymain_free();
 
     if (_Py_UnhandledKeyboardInterrupt) {
@@ -691,16 +737,24 @@ Py_RunMain(void)
 
 static int
 pymain_main(_PyArgv *args)
-{
+{   // @ Py_Main
+    // @ Py_BytesMain
+
+    // 加载程序执行参数、构造系统运行配置，完成 Python 系统框架初始化
     PyStatus status = pymain_init(args);
+
+    // 在初始化过程中，直接退出
     if (_PyStatus_IS_EXIT(status)) {
         pymain_free();
         return status.exitcode;
     }
+
+    // 在初始化过程中，出现错误
     if (_PyStatus_EXCEPTION(status)) {
         pymain_exit_error(status);
     }
 
+    // 运行 python 主程序
     return Py_RunMain();
 }
 
