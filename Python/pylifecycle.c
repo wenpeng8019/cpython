@@ -1019,6 +1019,7 @@ pyinit_core(_PyRuntimeState *runtime,
             const PyConfig *src_config,
             PyThreadState **tstate_p)
 {   // @ Py_InitializeFromConfig
+    // 初始化 Python 系统框架内核
 
     PyStatus status;
 
@@ -1088,7 +1089,7 @@ static PyStatus
 init_interp_main(PyThreadState *tstate)
 {   // @ pyinit_main
     // @ new_interpreter
-    // 初始化解释器的运行环境
+    // 初始化解释器执行（Python 程序）的运行环境
     // + 主要是导入并初始化一些必要的库和模块
 
     extern void _PyThread_debug_deprecation(void);
