@@ -86,6 +86,8 @@ __attribute__((
 
 #endif
 
+// 创建动态运行时实例（单例）全局对象
+// 该对象相当于 Python 自身的程序实体，也就是类似于 `app` 对象的概念
 _PyRuntimeState _PyRuntime
 #if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))
 __attribute__ ((section (".PyRuntime")))
@@ -1046,7 +1048,7 @@ pyinit_core(_PyRuntimeState *runtime,
 
     // Read the configuration, but don't compute the path configuration
     // (it is computed in the main init).
-    // 从各个配置信息源读取（和 `PyConfig` 相关的）配置数据信息，并完成 `PyConfig` 的解析和构造
+    // 从各个配置信息源读取（和 `PyConfig` 相关的）配置数据信息，并完成对 `PyConfig` 的解析和构造
     // 这里的参数 compute_path_config 被指定为 0，即此时不解析和 path 相关的配置
     status = _PyConfig_Read(&config, /* compute_path_config */0);
     if (_PyStatus_EXCEPTION(status)) {

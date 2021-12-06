@@ -39,6 +39,7 @@ pymain_init(const _PyArgv *args)
     PyStatus status;
 
     // 初始化（创建）动态运行时实例（单例）
+    // 相当于 Python 自身的程序实体，也就是类似于 `app` 对象的概念
     status = _PyRuntime_Initialize();
     if (_PyStatus_EXCEPTION(status)) {
         return status;
