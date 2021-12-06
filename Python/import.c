@@ -498,7 +498,9 @@ _PyImport_FixupBuiltin(PyObject *mod, const char *name, PyObject *modules)
 static PyObject *
 import_find_extension(PyThreadState *tstate, PyObject *name,
                       PyObject *filename)
-{
+{   // @ create_builtin
+    // @ _imp_create_dynamic_impl
+
     if (extensions == NULL) {
         return NULL;
     }
@@ -562,10 +564,15 @@ import_find_extension(PyThreadState *tstate, PyObject *name,
 /* Get the module object corresponding to a module name.
    First check the modules dictionary if there's one there,
    if not, create a new one and insert it in the modules dictionary. */
-
+// 得到一个 module 对象。即当获取不存在时自动创建。
 static PyObject *
 import_add_module(PyThreadState *tstate, PyObject *name)
-{
+{   // @ PyImport_AddModuleObject
+    // @ PyImport_ImportFrozenModuleObject
+    // @ import_find_extension
+    // @ _imp_init_frozen_impl
+    // @ module_dict_for_exec
+
     PyObject *modules = tstate->interp->modules;
     if (modules == NULL) {
         _PyErr_SetString(tstate, PyExc_RuntimeError,
@@ -606,7 +613,11 @@ import_add_module(PyThreadState *tstate, PyObject *name)
 
 PyObject *
 PyImport_AddModuleObject(PyObject *name)
-{
+{   // @ extern
+    // @ PyImport_AddModule
+    // @ create_builtin
+    // @ PyRun_InteractiveOneObjectEx
+
     PyThreadState *tstate = _PyThreadState_GET();
     PyObject *mod = import_add_module(tstate, name);
     if (mod) {
@@ -974,7 +985,9 @@ PyImport_GetImporter(PyObject *path)
 
 static PyObject*
 create_builtin(PyThreadState *tstate, PyObject *name, PyObject *spec)
-{
+{   // @ _PyImport_BootstrapImp
+    // @ _imp_create_builtin
+
     PyObject *mod = import_find_extension(tstate, name, name);
     if (mod || _PyErr_Occurred(tstate)) {
         return mod;
@@ -2531,6 +2544,7 @@ static PyModuleDef_Slot imp_slots[] = {
     {0, NULL}
 };
 
+// 定义 `imp` 模块对象
 static struct PyModuleDef imp_module = {
     PyModuleDef_HEAD_INIT,
     .m_name = "_imp",

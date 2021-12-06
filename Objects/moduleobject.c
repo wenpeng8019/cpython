@@ -60,7 +60,9 @@ PyModuleDef_Init(struct PyModuleDef* def)
 static int
 module_init_dict(PyModuleObject *mod, PyObject *md_dict,
                  PyObject *name, PyObject *doc)
-{
+{   // @ PyModule_NewObject
+    // @ module___init___impl
+
     _Py_IDENTIFIER(__package__);
     _Py_IDENTIFIER(__loader__);
 
@@ -88,7 +90,10 @@ module_init_dict(PyModuleObject *mod, PyObject *md_dict,
 
 static PyModuleObject *
 new_module_notrack(PyTypeObject *mt)
-{
+{   // @ PyModule_NewObject
+    // @ new_module
+    // 动态分配一个新的 PyModuleObject 对象。但不执行 PyObject_GC_Track 处理
+
     PyModuleObject *m;
     m = PyObject_GC_New(PyModuleObject, mt);
     if (m == NULL)
@@ -117,12 +122,26 @@ new_module(PyTypeObject *mt, PyObject *args, PyObject *kws)
 
 PyObject *
 PyModule_NewObject(PyObject *name)
-{
+{   // @ extern
+    // @ PyModule_New
+    
+    // 动态创建一个新的 PyModuleObject 对象
+    // 内存分配无需执行 PyObject_GC_Track 跟踪处理
     PyModuleObject *m = new_module_notrack(&PyModule_Type);
     if (m == NULL)
         return NULL;
+
+    // 对 module 域的命名空间进行初始化
+    // 添加默认项：
+    // __name__    = name;
+    // __doc__     = NULL; 
+    // __package__ = Py_None; 
+    // __loader__  = Py_None; 
+    // __spec__    = Py_None;
     if (module_init_dict(m, m->md_dict, name, NULL) != 0)
         goto fail;
+
+    // (初始化完成后) 执行 PyObject_GC_Track 跟踪处理
     PyObject_GC_Track(m);
     return (PyObject *)m;
 
@@ -165,7 +184,9 @@ check_api_version(const char *name, int module_api_version)
 
 static int
 _add_methods_to_object(PyObject *module, PyObject *name, PyMethodDef *functions)
-{
+{   // 
+    // 给 Python 对象动态添加方法
+
     PyObject *func;
     PyMethodDef *fdef;
 

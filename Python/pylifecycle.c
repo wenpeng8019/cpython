@@ -161,19 +161,23 @@ Py_IsInitialized(void)
 */
 static int
 init_importlib(PyThreadState *tstate, PyObject *sysmod)
-{
+{   // @ pycore_interp_init
+
     assert(!_PyErr_Occurred(tstate));
 
     PyInterpreterState *interp = tstate->interp;
     int verbose = _PyInterpreterState_GetConfig(interp)->verbose;
 
     // Import _importlib through its frozen version, _frozen_importlib.
+    // 导入 `_frozen_importlib` 模块，该模块是 frozen 类型
     if (verbose) {
         PySys_FormatStderr("import _frozen_importlib # frozen\n");
     }
     if (PyImport_ImportFrozenModule("_frozen_importlib") <= 0) {
         return -1;
     }
+
+    // 得到（获取）刚导入的 "_frozen_importlib" 模块，将其作为 `interp` 的 `importlib` 成员
     PyObject *importlib = PyImport_AddModule("_frozen_importlib"); // borrowed
     if (importlib == NULL) {
         return -1;
@@ -181,6 +185,7 @@ init_importlib(PyThreadState *tstate, PyObject *sysmod)
     interp->importlib = Py_NewRef(importlib);
 
     // Import the _imp module
+    // 导入 `_imp` 模块
     if (verbose) {
         PySys_FormatStderr("import _imp # builtin\n");
     }
