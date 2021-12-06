@@ -566,7 +566,9 @@ pyinit_core_reconfigure(_PyRuntimeState *runtime,
 static PyStatus
 pycore_init_runtime(_PyRuntimeState *runtime,
                     const PyConfig *config)
-{
+{   // @ pyinit_config
+    // 启动动态运行时实例
+
     if (runtime->initialized) {
         return _PyStatus_ERR("main interpreter already initialized");
     }
@@ -629,7 +631,8 @@ static PyStatus
 pycore_create_interpreter(_PyRuntimeState *runtime,
                           const PyConfig *config,
                           PyThreadState **tstate_p)
-{
+{   // @ pyinit_config
+
     /* Auto-thread-state API */
     PyStatus status = _PyGILState_Init(runtime);
     if (_PyStatus_EXCEPTION(status)) {
@@ -864,7 +867,7 @@ pyinit_config(_PyRuntimeState *runtime,
 {   // @ pyinit_core
     // 用指定的 `PyConfig` 配置，完成 Python 系统框架内核初始化处理
 
-    // 初始化运行时实体
+    // 启动动态运行时实例
     PyStatus status = pycore_init_runtime(runtime, config);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -916,7 +919,6 @@ _Py_PreInitializeFromPyArgv(const PyPreConfig *src_config, const _PyArgv *args)
     runtime->preinitializing = 1;
 
     PyPreConfig config;
-
     status = _PyPreConfig_InitFromPreConfig(&config, src_config);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -1020,6 +1022,8 @@ pyinit_core(_PyRuntimeState *runtime,
             PyThreadState **tstate_p)
 {   // @ Py_InitializeFromConfig
     // 初始化 Python 系统框架内核
+    // ! 此时的 `PyConfig` 只包含了默认值、和原始输入参数在内的、未经解析的原始数据信息
+    //   而不是已经解析完成的最终配置结果
 
     PyStatus status;
 
@@ -1042,7 +1046,7 @@ pyinit_core(_PyRuntimeState *runtime,
 
     // Read the configuration, but don't compute the path configuration
     // (it is computed in the main init).
-    // 从各个配置信息源加载 `PyConfig` 配置（重载 or 补充？）
+    // 从各个配置信息源读取（和 `PyConfig` 相关的）配置数据信息，并完成 `PyConfig` 的解析和构造
     // 这里的参数 compute_path_config 被指定为 0，即此时不解析和 path 相关的配置
     status = _PyConfig_Read(&config, /* compute_path_config */0);
     if (_PyStatus_EXCEPTION(status)) {
@@ -1053,9 +1057,10 @@ pyinit_core(_PyRuntimeState *runtime,
     if (!runtime->core_initialized) {
         
         // 用指定的 `PyConfig` 配置，完成 Python 系统框架内核初始化处理
-        // * 初始化运行时实体
+        // * 启动动态运行时实例
         // * 创建并初始化解释器
         // * 标记初始化完成
+        // 另外，解析后的 `PyConfig` 配置信息，最终会复制（保存）到 interp->config 中
         status = pyinit_config(runtime, tstate_p, &config);
     }
     // 之前执行过 Python 系统框架内核初始化处理
@@ -1112,7 +1117,7 @@ init_interp_main(PyThreadState *tstate)
          * This means anything which needs support from extension modules
          * or pure Python code in the standard library won't work.
          */
-        // (对于主解释器) 直接将其运行时实体标记为初始化完成
+        // (对于主解释器) 直接将其动态运行时实例标记为初始化完成
         if (is_main_interp) {
             interp->runtime->initialized = 1;
         }
@@ -1282,7 +1287,9 @@ Py_InitializeFromConfig(const PyConfig *config)
     // @ pymain_init
     // @ Py_InitializeEx
     // @ Py_FrozenMain
-    // 根据 PyConfig 配置信息，来初始化 Python 系统框架
+    // 根据 `PyConfig` 指定的配置选项和参数，来初始化 Python 系统环境
+    // ! 此时的 `PyConfig` 只包含了默认值、和原始输入参数在内的、未经解析的原始数据信息
+    //   而不是已经解析完成的最终配置结果
 
     if (config == NULL) {
         return _PyStatus_ERR("initialization config is NULL");
@@ -1290,7 +1297,7 @@ Py_InitializeFromConfig(const PyConfig *config)
 
     PyStatus status;
 
-    // 获取（初始化）Python 动态运行时实体（单例）
+    // 获取（初始化）Python 动态运行时实例（单例）
     status = _PyRuntime_Initialize();
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -1298,7 +1305,7 @@ Py_InitializeFromConfig(const PyConfig *config)
     _PyRuntimeState *runtime = &_PyRuntime;
 
     // 初始化 Python 系统框架内核
-    // + 包括读取构造配置信息、创建动态运行时对象、和解释器
+    // + 包括解析配置信息、启动动态运行时实例、和创建解释器
     PyThreadState *tstate = NULL;
     status = pyinit_core(runtime, config, &tstate);
     if (_PyStatus_EXCEPTION(status)) {
@@ -1358,7 +1365,7 @@ PyStatus
 _Py_InitializeMain(void)
 {   // @ extern
 
-    // 初始化动态运行时实体
+    // 初始化动态运行时实例
     PyStatus status = _PyRuntime_Initialize();
     if (_PyStatus_EXCEPTION(status)) {
         return status;
