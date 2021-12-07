@@ -2294,7 +2294,7 @@ config_read(PyConfig *config, int compute_path_config)
         }
     }
 
-    //（如果需要，默认）解析导入库设定
+    //（如果需要，即默认情况下）解析导入库设定
     if (config->_install_importlib) {
         status = config_init_import(config, compute_path_config);
         if (_PyStatus_EXCEPTION(status)) {
@@ -2406,7 +2406,11 @@ config_init_stdio(const PyConfig *config)
    - initialize C standard streams (stdin, stdout, stderr) */
 PyStatus
 _PyConfig_Write(const PyConfig *config, _PyRuntimeState *runtime)
-{
+{   // @ extern
+    // @ pycore_init_runtime
+    // @ pyinit_core_reconfigure
+    // @ interpreter_update_config
+
     config_set_global_vars(config);
 
     if (config->configure_c_stdio) {

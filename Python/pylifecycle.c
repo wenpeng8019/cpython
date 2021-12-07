@@ -169,7 +169,7 @@ init_importlib(PyThreadState *tstate, PyObject *sysmod)
     int verbose = _PyInterpreterState_GetConfig(interp)->verbose;
 
     // Import _importlib through its frozen version, _frozen_importlib.
-    // 导入 `_frozen_importlib` 模块，该模块是 frozen 类型
+    // 导入 `_frozen_importlib` 模块，即 frozen 版本的 `importlib` 模块
     if (verbose) {
         PySys_FormatStderr("import _frozen_importlib # frozen\n");
     }
@@ -185,10 +185,14 @@ init_importlib(PyThreadState *tstate, PyObject *sysmod)
     interp->importlib = Py_NewRef(importlib);
 
     // Import the _imp module
-    // 导入 `_imp` 模块
+    // 导入 `_imp` 模块。该模块是对 /Python/import.c 的封装
     if (verbose) {
         PySys_FormatStderr("import _imp # builtin\n");
     }
+    // 这里是通过一个特殊的方法 `_PyImport_BootstrapImp` 来"导入" `_imp` 模块的
+    // 事实上，它并不是“导入”，而是直接创建 `_imp` 模块。
+    // 因此此时，负责导入的 `importlib` 模块，还没有完成初始化处理。（即下面的 `_install` 处理）
+    // 而初始化处理，又依赖该 `_imp` 模块（的 is_frozen 功能）
     PyObject *imp_mod = _PyImport_BootstrapImp(tstate);
     if (imp_mod == NULL) {
         return -1;

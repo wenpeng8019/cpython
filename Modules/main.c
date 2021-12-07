@@ -167,7 +167,8 @@ error:
 
 static int
 pymain_sys_path_add_path0(PyInterpreterState *interp, PyObject *path0)
-{
+{   // @ pymain_run_python
+
     _Py_IDENTIFIER(path);
     PyObject *sys_path;
     PyObject *sysdict = interp->sysdict;
