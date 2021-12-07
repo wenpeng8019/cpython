@@ -199,6 +199,7 @@ init_importlib(PyThreadState *tstate, PyObject *sysmod)
     }
 
     // Install importlib as the implementation of import
+    // @ /Lib/importlib/_bootstrap.py
     PyObject *value = PyObject_CallMethod(importlib, "_install",
                                           "OO", sysmod, imp_mod);
     Py_DECREF(imp_mod);

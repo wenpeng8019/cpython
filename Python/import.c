@@ -30,9 +30,13 @@ extern "C" {
 static PyObject *import_add_module(PyThreadState *tstate, PyObject *name);
 
 /* See _PyImport_FixupExtensionObject() below */
+// fixup 扩展库、模块集合。
+// 被添加到这里的库、模块对象，意味着它被缓存到了内存，也就是只加载一次，下次可被直接复用
 static PyObject *extensions = NULL;
 
 /* This table is defined in config.c: */
+// 导入全局（共享）变量：built-in 模块定义表
+// 该全局（共享）变量在 /Modules/config.c 和 /PC/config.c 中定义
 extern struct _inittab _PyImport_Inittab[];
 
 struct _inittab *PyImport_Inittab = _PyImport_Inittab;
@@ -2023,7 +2027,7 @@ PyImport_Import(PyObject *module_name)
     }
 
     /* Get the builtins from current globals */
-    // 从全局变量中获取 builtins 对象
+    // 从当前调用栈环境中的全局变量中获取 builtins 对象
     globals = PyEval_GetGlobals();
     if (globals != NULL) {
         Py_INCREF(globals);
