@@ -633,6 +633,7 @@ va_build_stack(PyObject **small_stack, Py_ssize_t small_stack_len,
 }
 
 
+// 在模块的命名空间中添加变量项：`name` = value
 int
 PyModule_AddObjectRef(PyObject *mod, const char *name, PyObject *value)
 {

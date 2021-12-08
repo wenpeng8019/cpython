@@ -1356,8 +1356,6 @@ struct frozen_info {
 };
 
 // 获取指定 frozen 类型模块的 `frozen_info` 信息；或判断指定模块是否是 frozen 类型
-// `frozen_info` 信息相当于 client 端，frozen 模块是个（封闭的）字节码对象，其内部使用自己的解释器来执行
-// frozen 模块内部一般会维护一个 server 端，外部和他需要通过特定的消息协议来通讯。
 static frozen_status
 find_frozen(PyObject *nameobj, struct frozen_info *info)
 {   // @ PyImport_ImportFrozenModuleObject
@@ -1409,6 +1407,7 @@ find_frozen(PyObject *nameobj, struct frozen_info *info)
     return FROZEN_OKAY;
 }
 
+// 加载并解析字节码对象文件（.pyc）
 static PyObject *
 unmarshal_frozen_code(struct frozen_info *info)
 {
@@ -1815,7 +1814,8 @@ resolve_name(PyThreadState *tstate, PyObject *name, PyObject *globals, int level
 
 static PyObject *
 import_find_and_load(PyThreadState *tstate, PyObject *abs_name)
-{
+{   // @ PyImport_ImportModuleLevelObject
+
     _Py_IDENTIFIER(_find_and_load);
     PyObject *mod = NULL;
     PyInterpreterState *interp = tstate->interp;
@@ -1825,6 +1825,7 @@ import_find_and_load(PyThreadState *tstate, PyObject *abs_name)
 
     _PyTime_t t1 = 0, accumulated_copy = accumulated;
 
+    // 获取导入查找路径
     PyObject *sys_path = PySys_GetObject("path");
     PyObject *sys_meta_path = PySys_GetObject("meta_path");
     PyObject *sys_path_hooks = PySys_GetObject("path_hooks");
@@ -1841,6 +1842,7 @@ import_find_and_load(PyThreadState *tstate, PyObject *abs_name)
      * Anyway, importlib._find_and_load is much slower than
      * _PyDict_GetItemIdWithError().
      */
+    //（如果需要）打印输出（用于调试的）“导入开始时间”
     if (import_time) {
         static int header = 1;
         if (header) {
@@ -1857,6 +1859,7 @@ import_find_and_load(PyThreadState *tstate, PyObject *abs_name)
     if (PyDTrace_IMPORT_FIND_LOAD_START_ENABLED())
         PyDTrace_IMPORT_FIND_LOAD_START(PyUnicode_AsUTF8(abs_name));
 
+    // 调用 `importlib` 的 `find_and_load` 处理 
     mod = _PyObject_CallMethodIdObjArgs(interp->importlib,
                                         &PyId__find_and_load, abs_name,
                                         interp->import_func, NULL);
@@ -1865,6 +1868,7 @@ import_find_and_load(PyThreadState *tstate, PyObject *abs_name)
         PyDTrace_IMPORT_FIND_LOAD_DONE(PyUnicode_AsUTF8(abs_name),
                                        mod != NULL);
 
+    //（如果需要）打印输出（用于调试的）“导入完成时间和用时”
     if (import_time) {
         _PyTime_t cum = _PyTime_GetPerfCounter() - t1;
 
@@ -1897,6 +1901,12 @@ PyImport_GetModule(PyObject *name)
     return mod;
 }
 
+// 通用的导入处理
+// + 该函数会作为 `builtins` 的 `__import__` 方法的实现。
+//   并最终作为 Python 语法中 `import` 关键字的功能
+// + 另外一个需要注意的是，这里将 __import__ 的实现，直接交给了 `importlib` 模块来处理
+//   也就是说 `import` 机制，并不是 built-in 到 Python 内核代码中的，
+//   但 `importlib` 模块却是随 Python 一起发行的（必要的）标准库模块
 PyObject *
 PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
                                  PyObject *locals, PyObject *fromlist,
@@ -1918,6 +1928,8 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
 
     /* The below code is importlib.__import__() & _gcd_import(), ported to C
        for added performance. */
+       // 下面的代码是从 importlib.__import__() & _gcd_import() 移植过来的
+       // 转换成 c 是为了增加性能
 
     if (!PyUnicode_Check(name)) {
         _PyErr_SetString(tstate, PyExc_TypeError,
@@ -1951,11 +1963,13 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
         goto error;
     }
 
+    // 如果模块已经存在
     if (mod != NULL && mod != Py_None) {
         if (import_ensure_initialized(tstate->interp, mod, abs_name) < 0) {
             goto error;
         }
     }
+    // 查找并加载模块
     else {
         Py_XDECREF(mod);
         mod = import_find_and_load(tstate, abs_name);
@@ -1964,12 +1978,14 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
         }
     }
 
+    // 处理 `from` 关键字
     has_from = 0;
     if (fromlist != NULL && fromlist != Py_None) {
         has_from = PyObject_IsTrue(fromlist);
         if (has_from < 0)
             goto error;
     }
+    //（如果没有 `from` 关键字）处理由 `.` 定义的子域
     if (!has_from) {
         Py_ssize_t len = PyUnicode_GET_LENGTH(name);
         if (level == 0 || len > 0) {
@@ -2022,6 +2038,7 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
             Py_INCREF(mod);
         }
     }
+    // 处理 fromlist
     else {
         PyObject *path;
         if (_PyObject_LookupAttrId(mod, &PyId___path__, &path) < 0) {
@@ -2029,6 +2046,8 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
         }
         if (path) {
             Py_DECREF(path);
+
+            // 调用 `importlib` 的 `handle_fromlist` 处理
             final_mod = _PyObject_CallMethodIdObjArgs(
                         interp->importlib, &PyId__handle_fromlist,
                         mod, fromlist, interp->import_func, NULL);
@@ -2659,14 +2678,17 @@ static PyMethodDef imp_methods[] = {
 };
 
 
+// `_imp` 模块的启动（构造）处理
 static int
 imp_module_exec(PyObject *module)
-{
+{   // @ imp_slots
+
     const wchar_t *mode = _Py_GetConfig()->check_hash_pycs_mode;
     PyObject *pyc_mode = PyUnicode_FromWideChar(mode, -1);
     if (pyc_mode == NULL) {
         return -1;
     }
+    // 在模块的命名空间中添加项：`check_hash_based_pycs` = _Py_GetConfig()->check_hash_pycs_mode
     if (PyModule_AddObjectRef(module, "check_hash_based_pycs", pyc_mode) < 0) {
         Py_DECREF(pyc_mode);
         return -1;
