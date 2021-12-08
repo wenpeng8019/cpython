@@ -754,17 +754,23 @@ error:
     return m;
 }
 
+// 获得（获取或新建）指定 module 对象的 dict 对象（命名空间）
 static PyObject *
 module_dict_for_exec(PyThreadState *tstate, PyObject *name)
-{
+{   // @ PyImport_ImportFrozenModuleObject
+    // @ PyImport_ExecCodeModuleObject
+
     _Py_IDENTIFIER(__builtins__);
     PyObject *m, *d;
 
+    // 获得（获取或新建）指定的 module 对象
     m = import_add_module(tstate, name);
     if (m == NULL)
         return NULL;
+
     /* If the module is being reloaded, we get the old module back
        and re-use its dict to exec the new code. */
+    //（首次）在 module 的命名空间中初始化构建 `__builtins__`（对象）变量
     d = PyModule_GetDict(m);
     int r = _PyDict_ContainsId(d, &PyId___builtins__);
     if (r == 0) {
@@ -782,12 +788,22 @@ module_dict_for_exec(PyThreadState *tstate, PyObject *name)
     return d;
 }
 
+// 触发执行（由 frozen 模块指定的）安装脚本，并返回成功安装后的 module 对象
+// + 这个函数的封装架构有些“奇怪”
+//   此时，传入的 dict 就是 frozen 模块对象的命名空间 dict
+//   这说明在执行该函数前，frozen 模块对象已经创建完成。
+//   而这里在返回时，会查找并返回 frozen 模块对象。
+//   这个最后的操作和 exec_code 行为几乎没有任何关系。没必要在上下文流程中绑定到一起。
+//   反而会引起歧义：即容易让人以为是 exec_code 后，才会创建 module 对象
 static PyObject *
 exec_code_in_module(PyThreadState *tstate, PyObject *name,
                     PyObject *module_dict, PyObject *code_object)
-{
+{   // @ PyImport_ImportFrozenModuleObject
+    // @ PyImport_ExecCodeModuleObject
+
     PyObject *v, *m;
 
+    // 触发执行（由 frozen 模块指定的）安装脚本
     v = PyEval_EvalCode(code_object, module_dict, module_dict);
     if (v == NULL) {
         remove_module(tstate, name);
@@ -795,6 +811,7 @@ exec_code_in_module(PyThreadState *tstate, PyObject *name,
     }
     Py_DECREF(v);
 
+    // 返回指定的 module 对象
     m = import_get_module(tstate, name);
     if (m == NULL && !_PyErr_Occurred(tstate)) {
         _PyErr_Format(tstate, PyExc_ImportError,
@@ -813,14 +830,18 @@ PyImport_ExecCodeModuleObject(PyObject *name, PyObject *co, PyObject *pathname,
     PyObject *d, *external, *res;
     _Py_IDENTIFIER(_fix_up_module);
 
+    // 获得（获取或新建）指定 module 对象的 dict 对象（命名空间）
     d = module_dict_for_exec(tstate, name);
     if (d == NULL) {
         return NULL;
     }
 
+    // 自动获取字节码对象（.pyc）的文件名
     if (pathname == NULL) {
         pathname = ((PyCodeObject *)co)->co_filename;
     }
+
+    // 触发执行 `importlib` 模块的 `_bootstrap_external` 方法
     external = PyObject_GetAttrString(tstate->interp->importlib,
                                       "_bootstrap_external");
     if (external == NULL) {
@@ -831,8 +852,11 @@ PyImport_ExecCodeModuleObject(PyObject *name, PyObject *co, PyObject *pathname,
                                         &PyId__fix_up_module,
                                         d, name, pathname, cpathname, NULL);
     Py_DECREF(external);
+
     if (res != NULL) {
         Py_DECREF(res);
+
+        // 触发执行（由 frozen 模块指定的）安装脚本，并返回成功安装后的 module 对象
         res = exec_code_in_module(tstate, name, d, co);
     }
     Py_DECREF(d);
@@ -903,11 +927,20 @@ _imp__fix_co_filename_impl(PyObject *module, PyCodeObject *code,
 
 /* Helper to test for built-in module */
 
+// - 判断指定模块是否是 builtin 类型模块
+//   - 如果不是 builtin 类型模块，返回 0（false）
+//   - 如果是 builtin 类型模块，返回非 0（true）
+//     - 如果该模块未初始化（初始化失败）返回 -1
+//     - 如果一切正常，返回 1
 static int
 is_builtin(PyObject *name)
-{
+{   // @ _imp_is_builtin_impl
+
     int i;
+
+    // 遍历 builtin 模块表，（查找）判断指定模块是否在 builtin 模块表中
     for (i = 0; PyImport_Inittab[i].name != NULL; i++) {
+
         if (_PyUnicode_EqualToASCIIString(name, PyImport_Inittab[i].name)) {
             if (PyImport_Inittab[i].initfunc == NULL)
                 return -1;
@@ -985,6 +1018,7 @@ get_path_importer(PyThreadState *tstate, PyObject *path_importer_cache,
     return importer;
 }
 
+// 获取指定路径（文件）下的 Importer 对象
 PyObject *
 PyImport_GetImporter(PyObject *path)
 {   // @ extern
@@ -1004,12 +1038,15 @@ create_builtin(PyThreadState *tstate, PyObject *name, PyObject *spec)
 {   // @ _PyImport_BootstrapImp
     // @ _imp_create_builtin
 
+    // 从 extensions 缓存中查找指定模块
     PyObject *mod = import_find_extension(tstate, name, name);
     if (mod || _PyErr_Occurred(tstate)) {
         return mod;
     }
 
     PyObject *modules = tstate->interp->modules;
+
+    // 遍历 builtin 模块表
     for (struct _inittab *p = PyImport_Inittab; p->name != NULL; p++) {
         if (_PyUnicode_EqualToASCIIString(name, p->name)) {
             if (p->initfunc == NULL) {
@@ -1017,22 +1054,30 @@ create_builtin(PyThreadState *tstate, PyObject *name, PyObject *spec)
                 return PyImport_AddModuleObject(name);
             }
 
+            // 初始化（创建）builtin 模块实例
             mod = (*p->initfunc)();
             if (mod == NULL) {
                 return NULL;
             }
 
+            // 如果返回的是 module 类型（而不是 module 对象）
             if (PyObject_TypeCheck(mod, &PyModuleDef_Type)) {
+
+                // 用 module 类型，创建 module 实例（对象）
                 return PyModule_FromDefAndSpec((PyModuleDef*)mod, spec);
             }
+            // 如果返回的是 module 对象
+            // 此时说明该 module 对象是单例类型，即可以添加到 extensions 缓存复用
             else {
+
                 /* Remember pointer to module init function. */
                 PyModuleDef *def = PyModule_GetDef(mod);
                 if (def == NULL) {
                     return NULL;
                 }
-
                 def->m_base.m_init = p->initfunc;
+
+                // 添加到 extensions 缓存
                 if (_PyImport_FixupExtensionObject(mod, name, name,
                                                    modules) < 0) {
                     return NULL;
@@ -1045,7 +1090,6 @@ create_builtin(PyThreadState *tstate, PyObject *name, PyObject *spec)
     // not found
     Py_RETURN_NONE;
 }
-
 
 
 /*[clinic input]
@@ -1240,11 +1284,20 @@ set_frozen_error(frozen_status status, PyObject *modname)
     }
 }
 
+// 查找（Python 支持的）frozen 类型模块
+// + 这些模块是 Python 编译时设定的，一般都是 Python 的标准库。
+//   作为 frozen 类型进行部署可以显著的提高性能、降低资源开销
 static const struct _frozen *
 look_up_frozen(const char *name)
-{
+{   // @ find_frozen
+
     const struct _frozen *p;
     // We always use the bootstrap modules.
+    // 首先，遍历 bootstrap 类型的 frozen 模块。
+    // 目前默认只包括：`_frozen_importlib`、`_frozen_importlib_external`、`zipimport` 三个模块
+    // 注意，这也同时说明：
+    // - 这类 frozen 模块是不可以被 Python 程序重载的。
+    // - 它们也不受 use_frozen 选项影响
     for (p = _PyImport_FrozenBootstrap; ; p++) {
         if (p->name == NULL) {
             // We hit the end-of-list sentinel value.
@@ -1256,6 +1309,7 @@ look_up_frozen(const char *name)
     }
     // Prefer custom modules, if any.  Frozen stdlib modules can be
     // disabled here by setting "code" to NULL in the array entry.
+    // 其次，优先选择 Python 程序（动态）自定义添加的 frozen 模块
     if (PyImport_FrozenModules != NULL) {
         for (p = PyImport_FrozenModules; ; p++) {
             if (p->name == NULL) {
@@ -1267,6 +1321,9 @@ look_up_frozen(const char *name)
         }
     }
     // Frozen stdlib modules may be disabled.
+    // 最后，查找随 Python 部署发行的，针对标准库的 frozen 模块
+    // 这类 frozen 模块可以被 use_frozen 选项屏蔽。
+    // 如果禁用了 use_frozen 选项，那么这些标准库模块将按普通 py 模块进行处理，即动态解析
     if (use_frozen()) {
         for (p = _PyImport_FrozenStdlib; ; p++) {
             if (p->name == NULL) {
@@ -1298,9 +1355,17 @@ struct frozen_info {
     const char *origname;
 };
 
+// 获取指定 frozen 类型模块的 `frozen_info` 信息；或判断指定模块是否是 frozen 类型
+// `frozen_info` 信息相当于 client 端，frozen 模块是个（封闭的）字节码对象，其内部使用自己的解释器来执行
+// frozen 模块内部一般会维护一个 server 端，外部和他需要通过特定的消息协议来通讯。
 static frozen_status
 find_frozen(PyObject *nameobj, struct frozen_info *info)
-{
+{   // @ PyImport_ImportFrozenModuleObject
+    // @ _imp_find_frozen_impl
+    // @ _imp_get_frozen_object_impl
+    // @ _imp_is_frozen_package_impl
+    // @ _imp_is_frozen_impl
+
     if (info != NULL) {
         memset(info, 0, sizeof(*info));
     }
@@ -1375,9 +1440,13 @@ unmarshal_frozen_code(struct frozen_info *info)
    an exception set if the initialization failed.
    This function is also used from frozenmain.c */
 
+// 导入一个 frozen 类型的模块
 int
 PyImport_ImportFrozenModuleObject(PyObject *name)
-{
+{   // @ extern
+    // @ PyImport_ImportFrozenModule
+    // @ _imp_init_frozen_impl
+
     PyThreadState *tstate = _PyThreadState_GET();
     PyObject *co, *m, *d = NULL;
     int err;
@@ -1394,16 +1463,24 @@ PyImport_ImportFrozenModuleObject(PyObject *name)
         set_frozen_error(status, name);
         return -1;
     }
+    // 解析加载 frozen 模块对应的字节码对象（.pyc）实体
     co = unmarshal_frozen_code(&info);
     if (co == NULL) {
         return -1;
     }
+
+    // 如果 module 是一个包对象
     if (info.is_package) {
+        
         /* Set __path__ to the empty list */
         PyObject *l;
+
+        // 创建（并返回）一个新的 module 对象
         m = import_add_module(tstate, name);
         if (m == NULL)
             goto err_return;
+
+        // 在 mod 命名空间中初始化 __path__ 变量
         d = PyModule_GetDict(m);
         l = PyList_New(0);
         if (l == NULL) {
@@ -1416,15 +1493,25 @@ PyImport_ImportFrozenModuleObject(PyObject *name)
         if (err != 0)
             goto err_return;
     }
+
+    // 获得（获取或新建）指定 module 对象的 dict 对象（命名空间）
     d = module_dict_for_exec(tstate, name);
     if (d == NULL) {
         goto err_return;
     }
+
+    // 触发执行（由 frozen 模块指定的）安装脚本，并返回成功安装后的 module 对象
+    // + 这里有个细节
+    //   就是上面 module_dict_for_exec 明明可以直接返回 module 对象
+    //   但这里却由 exec_code_in_module 来返回，这相当于查找两次，降低了效率。
+    //   所以，为何要这样设计和架构？
     m = exec_code_in_module(tstate, name, d, co);
     if (m == NULL) {
         goto err_return;
     }
     Py_DECREF(m);
+
+    // 将 origname 绑定到 mod 命名空间中的 __origname__ 变量
     /* Set __origname__ (consumed in FrozenImporter._setup_module()). */
     PyObject *origname;
     if (info.origname) {
@@ -1468,10 +1555,15 @@ PyImport_ImportFrozenModule(const char *name)
 
 /* Import a module, either built-in, frozen, or external, and return
    its module object WITH INCREMENTED REFERENCE COUNT */
-
+// 导入一个模块，该模块可以是任意类型。
+// 该函数内部实际调用的是 PyImport_Import 处理。
 PyObject *
 PyImport_ImportModule(const char *name)
-{
+{   // @ extern
+    // @ _PyImportZip_Init
+    // @ PyImport_ImportModuleNoBlock
+    // @ PyImport_ReloadModule
+
     PyObject *pname;
     PyObject *result;
 
@@ -2012,7 +2104,9 @@ PyImport_ReloadModule(PyObject *m)
 // 这意味着，在当前环境中安装的各种 hooks 都将生效。
 PyObject *
 PyImport_Import(PyObject *module_name)
-{
+{   // @ extern
+    // @ PyImport_ImportModule
+
     _Py_IDENTIFIER(__import__);
     _Py_IDENTIFIER(__builtins__);
 
@@ -2143,6 +2237,8 @@ _imp.init_frozen
 Initializes a frozen module.
 [clinic start generated code]*/
 
+// `_imp`.init_frozen()
+// 导入一个 frozen 类型的模块，并返回这个模块
 static PyObject *
 _imp_init_frozen_impl(PyObject *module, PyObject *name)
 /*[clinic end generated code: output=fc0511ed869fd69c input=13019adfc04f3fb3]*/
@@ -2156,6 +2252,8 @@ _imp_init_frozen_impl(PyObject *module, PyObject *name)
     if (ret == 0) {
         Py_RETURN_NONE;
     }
+
+    // 获取并返回新导入的模块对象
     return import_add_module(tstate, name);
 }
 
@@ -2178,6 +2276,7 @@ The returned info (a 2-tuple):
                 the module's current name)
 [clinic start generated code]*/
 
+// 查找并返回 Python 支持的 frozen 类型的模块信息
 static PyObject *
 _imp_find_frozen_impl(PyObject *module, PyObject *name, int withdata)
 /*[clinic end generated code: output=8c1c3c7f925397a5 input=22a8847c201542fd]*/
@@ -2212,6 +2311,7 @@ _imp_find_frozen_impl(PyObject *module, PyObject *name, int withdata)
         }
     }
 
+    // 返回一个 tuple 类型对象，包含（frozen_info, is_package, origname）
     PyObject *result = PyTuple_Pack(3, data ? data : Py_None,
                                     info.is_package ? Py_True : Py_False,
                                     origname ? origname : Py_None);
@@ -2230,6 +2330,8 @@ _imp.get_frozen_object
 Create a code object for a frozen module.
 [clinic start generated code]*/
 
+// `_imp`.get_frozen_object()
+// 获取 
 static PyObject *
 _imp_get_frozen_object_impl(PyObject *module, PyObject *name,
                             PyObject *dataobj)
@@ -2281,6 +2383,8 @@ _imp.is_frozen_package
 Returns True if the module name is of a frozen package.
 [clinic start generated code]*/
 
+// `_imp`.is_frozen_package()
+// 判断一个包是否是 frozen 类型
 static PyObject *
 _imp_is_frozen_package_impl(PyObject *module, PyObject *name)
 /*[clinic end generated code: output=e70cbdb45784a1c9 input=81b6cdecd080fbb8]*/
@@ -2303,6 +2407,8 @@ _imp.is_builtin
 Returns True if the module name corresponds to a built-in module.
 [clinic start generated code]*/
 
+// `_imp`.is_builtin()
+// 判断一个模块是否是 builtin 类型
 static PyObject *
 _imp_is_builtin_impl(PyObject *module, PyObject *name)
 /*[clinic end generated code: output=3bfd1162e2d3be82 input=86befdac021dd1c7]*/
@@ -2319,6 +2425,8 @@ _imp.is_frozen
 Returns True if the module name corresponds to a frozen module.
 [clinic start generated code]*/
 
+// `_imp`.is_frozen()
+// 判断一个模块是否是 frozen 类型
 static PyObject *
 _imp_is_frozen_impl(PyObject *module, PyObject *name)
 /*[clinic end generated code: output=01f408f5ec0f2577 input=7301dbca1897d66b]*/
@@ -2337,6 +2445,8 @@ _imp._frozen_module_names
 Returns the list of available frozen modules.
 [clinic start generated code]*/
 
+// `_imp`._frozen_module_names()
+// 获取 Python 支持的所有 frozen 模块（命名）
 static PyObject *
 _imp__frozen_module_names_impl(PyObject *module)
 /*[clinic end generated code: output=80609ef6256310a8 input=76237fbfa94460d2]*/
@@ -2366,8 +2476,13 @@ _imp__override_frozen_modules_for_tests_impl(PyObject *module, int override)
 }
 
 /* Common implementation for _imp.exec_dynamic and _imp.exec_builtin */
+// 触发执行（builtin、dynamic 类型）模块的 `exec`（启动运行）事件处理接口
 static int
-exec_builtin_or_dynamic(PyObject *mod) {
+exec_builtin_or_dynamic(PyObject *mod) 
+{   // @ _PyImport_BootstrapImp
+    // @ _imp_exec_builtin_impl
+    // @ _imp_exec_dynamic_impl
+
     PyModuleDef *def;
     void *state;
 
@@ -2386,6 +2501,7 @@ exec_builtin_or_dynamic(PyObject *mod) {
         return 0;
     }
 
+    // 触发 Python 模块的 exec（启动运行）处理
     return PyModule_ExecDef(mod, def);
 }
 
@@ -2401,6 +2517,8 @@ _imp.create_dynamic
 Create an extension module.
 [clinic start generated code]*/
 
+// `_imp`.create_dynamic()
+// 创建一个（dynamic 类型）模块
 static PyObject *
 _imp_create_dynamic_impl(PyObject *module, PyObject *spec, PyObject *file)
 /*[clinic end generated code: output=83249b827a4fde77 input=c31b954f4cf4e09d]*/
@@ -2456,6 +2574,8 @@ _imp.exec_dynamic -> int
 Initialize an extension module.
 [clinic start generated code]*/
 
+// `_imp`.create_dynamic()
+// 触发执行（dynamic 类型）模块的 `exec`（启动运行）事件处理接口
 static int
 _imp_exec_dynamic_impl(PyObject *module, PyObject *mod)
 /*[clinic end generated code: output=f5720ac7b465877d input=9fdbfcb250280d3a]*/
@@ -2475,6 +2595,8 @@ _imp.exec_builtin -> int
 Initialize a built-in module.
 [clinic start generated code]*/
 
+// `_imp`.exec_builtin()
+// 触发执行（builtin 类型）模块的 `exec`（启动运行）事件处理接口
 static int
 _imp_exec_builtin_impl(PyObject *module, PyObject *mod)
 /*[clinic end generated code: output=0262447b240c038e input=7beed5a2f12a60ca]*/
@@ -2580,9 +2702,13 @@ PyInit__imp(void)
 // Import the _imp extension by calling manually _imp.create_builtin() and
 // _imp.exec_builtin() since importlib is not initialized yet. Initializing
 // importlib requires the _imp module: this function fix the bootstrap issue.
+// （初始化）导入 `_imp` 模块
+// + 像上面说的，
 PyObject*
 _PyImport_BootstrapImp(PyThreadState *tstate)
-{
+{   // @ extern
+    // @ init_importlib
+
     PyObject *name = PyUnicode_FromString("_imp");
     if (name == NULL) {
         return NULL;
@@ -2592,10 +2718,12 @@ _PyImport_BootstrapImp(PyThreadState *tstate)
     // an object with just a name attribute.
     //
     // _imp.__spec__ is overridden by importlib._bootstrap._instal() anyway.
+    // 创建一个只有 'name' 项的 attrs 对象（这里 {..} 表示创建的是 Python 的 dict 类型）
     PyObject *attrs = Py_BuildValue("{sO}", "name", name);
     if (attrs == NULL) {
         goto error;
     }
+    // 用 attr 来构造 spec
     PyObject *spec = _PyNamespace_New(attrs);
     Py_DECREF(attrs);
     if (spec == NULL) {
@@ -2603,6 +2731,7 @@ _PyImport_BootstrapImp(PyThreadState *tstate)
     }
 
     // Create the _imp module from its definition.
+    // 创建 `_imp` 模块（该模块是 builtin 类型）
     PyObject *mod = create_builtin(tstate, name, spec);
     Py_CLEAR(name);
     Py_DECREF(spec);
@@ -2612,6 +2741,7 @@ _PyImport_BootstrapImp(PyThreadState *tstate)
     assert(mod != Py_None);  // not found
 
     // Execute the _imp module: call imp_module_exec().
+    // 执行模块的 exec（启动）处理
     if (exec_builtin_or_dynamic(mod) < 0) {
         Py_DECREF(mod);
         goto error;

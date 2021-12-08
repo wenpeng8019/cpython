@@ -288,7 +288,9 @@ _PyModule_CreateInitialized(struct PyModuleDef* module, int module_api_version)
 
 PyObject *
 PyModule_FromDefAndSpec2(struct PyModuleDef* def, PyObject *spec, int module_api_version)
-{
+{   // @ create_builtin
+    // @ _PyImport_LoadDynamicModuleWithSpec
+
     PyModuleDef_Slot* cur_slot;
     PyObject *(*create)(PyObject *, PyModuleDef*) = NULL;
     PyObject *nameobj;
@@ -410,9 +412,12 @@ error:
     return NULL;
 }
 
+// 触发 Python 模块的 exec（启动运行）处理
 int
 PyModule_ExecDef(PyObject *module, PyModuleDef *def)
-{
+{   // @ extern
+    // @ exec_builtin_or_dynamic
+
     PyModuleDef_Slot *cur_slot;
     const char *name;
     int ret;
@@ -440,6 +445,8 @@ PyModule_ExecDef(PyObject *module, PyModuleDef *def)
         return 0;
     }
 
+    // 遍历事件接口槽
+    // - 触发 exec 事件接口
     for (cur_slot = def->m_slots; cur_slot && cur_slot->slot; cur_slot++) {
         switch (cur_slot->slot) {
             case Py_mod_create:
