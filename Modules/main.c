@@ -134,7 +134,8 @@ pymain_exit_err_print(void)
    Return 0 otherwise. */
 static int
 pymain_get_importer(const wchar_t *filename, PyObject **importer_p, int *exitcode)
-{
+{   // @pymain_run_python
+
     PyObject *sys_path0 = NULL, *importer;
 
     sys_path0 = PyUnicode_FromWideChar(filename, wcslen(filename));
@@ -570,9 +571,7 @@ pymain_run_python(int *exitcode)
     // 获取配置信息（包括要运行的 Python 程序信息）
     PyConfig *config = (PyConfig*)_PyInterpreterState_GetConfig(interp);
 
-    // 如果运行的是 Python 脚本文件
-    // 这里的 filename 是一个包（目录、或 zip 文件），里面含有 __main__.py 文件
-    // 同时，该包会作为库导入的入口之一，将其添加到 sys.path
+    // 判断要运行的 Python 脚本（程序）是否存在 Importer
     PyObject *main_importer_path = NULL;
     if (config->run_filename != NULL) {
 
@@ -581,11 +580,20 @@ pymain_run_python(int *exitcode)
            prepended to sys.path.
 
            Otherwise, main_importer_path is left unchanged. */
+        // 判断要执行的 Python 脚本（程序）是否存在 Importer
+        // + 首先，这个函数返回到值，表示的是操作是否成功。如果成功返回 0；否则失败，程序退出。
+        //   而关于是否存在 Importer，则是通过 main_importer_path 的返回值来体现。
+        //   - 如果没有返回值。即保持入参值 NULL 不变，说明不存在 Importer
+        //   - 如果存在 Importer，则 main_importer_path 会将 run_filename(字符串类型) 转换为 PyObject 类型返回。
+        // + 关于是否存在 Importer
+        //   如果存在 Importer，往往说明 Python 脚本（程序）是一个包（目录或 zip 文件），其下会存在 __main__.py
         if (pymain_get_importer(config->run_filename, &main_importer_path,
                                 exitcode)) {
             return;
         }
     }
+
+    // 要运行的 Python 脚本（程序）存在 Importer，则将脚本所在目录作为 `path0`，添加到导入路径中
     if (main_importer_path != NULL) {
         if (pymain_sys_path_add_path0(interp, main_importer_path) < 0) {
             goto error;
@@ -593,7 +601,7 @@ pymain_run_python(int *exitcode)
     }
     else if (!config->isolated) {
 
-        // 其他情况下，将 "当前运行路径" 作为库导入的入口之一，将其添加到 sys.path
+        // 其他情况下，将 "当前运行路径" 作为 `path0`，添加到导入路径中
 
         PyObject *path0 = NULL;
         int res = _PyPathConfig_ComputeSysPath0(&config->argv, &path0);

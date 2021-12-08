@@ -927,10 +927,13 @@ is_builtin(PyObject *name)
    a finder for this path item. Cache the result in
    path_importer_cache. */
 
+// - 获取 Importer 对象，即（由程序自定义的）针对某个子路径的，导入路径解析器
+// + 这里的参数 p，就是那个子路径
 static PyObject *
 get_path_importer(PyThreadState *tstate, PyObject *path_importer_cache,
                   PyObject *path_hooks, PyObject *p)
-{
+{   // @ PyImport_GetImporter
+
     PyObject *importer;
     Py_ssize_t j, nhooks;
 
@@ -942,6 +945,7 @@ get_path_importer(PyThreadState *tstate, PyObject *path_importer_cache,
     if (nhooks < 0)
         return NULL; /* Shouldn't happen */
 
+    // 先从缓存中获取 Importer
     importer = PyDict_GetItemWithError(path_importer_cache, p);
     if (importer != NULL || _PyErr_Occurred(tstate)) {
         Py_XINCREF(importer);
@@ -949,13 +953,17 @@ get_path_importer(PyThreadState *tstate, PyObject *path_importer_cache,
     }
 
     /* set path_importer_cache[p] to None to avoid recursion */
+    // 先置位缓存，以避免（后面的）递归遍历导致的无限循环
     if (PyDict_SetItem(path_importer_cache, p, Py_None) != 0)
         return NULL;
 
+    // 遍历（由程序自定义的）hook 对象
     for (j = 0; j < nhooks; j++) {
         PyObject *hook = PyList_GetItem(path_hooks, j);
         if (hook == NULL)
             return NULL;
+
+        // 由 hook 来获取针对该子路径 p 的 importer
         importer = PyObject_CallOneArg(hook, p);
         if (importer != NULL)
             break;
@@ -968,6 +976,8 @@ get_path_importer(PyThreadState *tstate, PyObject *path_importer_cache,
     if (importer == NULL) {
         Py_RETURN_NONE;
     }
+
+    // 将得到的 importer 添加到缓存 
     if (PyDict_SetItem(path_importer_cache, p, importer) < 0) {
         Py_DECREF(importer);
         return NULL;
@@ -977,7 +987,9 @@ get_path_importer(PyThreadState *tstate, PyObject *path_importer_cache,
 
 PyObject *
 PyImport_GetImporter(PyObject *path)
-{
+{   // @ extern
+    // @ pymain_get_importer
+
     PyThreadState *tstate = _PyThreadState_GET();
     PyObject *path_importer_cache = PySys_GetObject("path_importer_cache");
     PyObject *path_hooks = PySys_GetObject("path_hooks");
