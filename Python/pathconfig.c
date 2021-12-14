@@ -385,7 +385,6 @@ done:
 static PyStatus
 config_init_pathconfig(PyConfig *config, int compute_path_config)
 {   // @ _PyConfig_InitPathConfig
-    // @ config_init_import
     // 初始化 PyConfig 中和 Path 相关的设定
 
     // 创建一个局部的 _PyPathConfig 对象
@@ -461,7 +460,7 @@ done:
 PyStatus
 _PyConfig_InitPathConfig(PyConfig *config, int compute_path_config)
 {   // @ extern
-    // 
+    // @ config_init_import
 
 
     /* Do we need to calculate the path? */

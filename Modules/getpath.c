@@ -1686,7 +1686,9 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
    If a field is already set (non NULL), it is left unchanged. */
 PyStatus
 _PyPathConfig_Calculate(_PyPathConfig *pathconfig, const PyConfig *config)
-{
+{   // @ extern
+    // @ pathconfig_init
+
     PyStatus status;
 
     // 创建路径配置信息解析工具类
