@@ -287,7 +287,8 @@ _PyConfig_WritePathConfig(const PyConfig *config)
 
 static PyStatus
 config_init_module_search_paths(PyConfig *config, _PyPathConfig *pathconfig)
-{
+{   // @ config_init_pathconfig
+
     assert(!config->module_search_paths_set);
 
     _PyWideStringList_Clear(&config->module_search_paths);
