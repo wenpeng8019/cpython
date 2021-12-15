@@ -1364,4 +1364,5 @@ def _install_external_importers():
     global _bootstrap_external
     import _frozen_importlib_external
     _bootstrap_external = _frozen_importlib_external
+    # 将当前 module 安装作为 `importlib_external` 模块
     _frozen_importlib_external._install(sys.modules[__name__])

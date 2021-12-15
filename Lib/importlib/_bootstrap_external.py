@@ -1705,7 +1705,11 @@ def _set_bootstrap_module(_bootstrap_module):
 
 def _install(_bootstrap_module):
     """Install the path-based import components."""
+    
+    # 将 `bootstrap` 模块保存到全局变量
     _set_bootstrap_module(_bootstrap_module)
+
     supported_loaders = _get_supported_file_loaders()
     sys.path_hooks.extend([FileFinder.path_hook(*supported_loaders)])
+    
     sys.meta_path.append(PathFinder)
