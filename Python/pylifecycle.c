@@ -1230,7 +1230,7 @@ init_interp_main(PyThreadState *tstate)
 
     if (is_main_interp) {
 #ifndef MS_WINDOWS
-        emit_stderr_warning_for_legacy_locale(interp->runtime);
+        emit_stderr_warning_for_legacy_locale(interp->runtime);-
 #endif
     }
 
@@ -2241,7 +2241,8 @@ add_main_module(PyInterpreterState *interp)
 
 static PyStatus
 init_import_site(void)
-{
+{   // @ init_interp_main
+
     PyObject *m;
     m = PyImport_ImportModule("site");
     if (m == NULL) {

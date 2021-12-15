@@ -84,7 +84,9 @@ ENABLE_USER_SITE = None
 # for distutils.commands.install
 # These values are initialized by the getuserbase() and getusersitepackages()
 # functions, through the main() function when Python starts.
+
 USER_SITE = None
+# 当前用户存储空间（针对 Python）的根目录
 USER_BASE = None
 
 
@@ -162,6 +164,7 @@ def addpackage(sitedir, name, known_paths):
        For each line in the file, either combine it with sitedir to a path
        and add that to known_paths, or execute it if it starts with 'import '.
     """
+
     if known_paths is None:
         known_paths = _init_pathinfo()
         reset = True
@@ -207,25 +210,35 @@ def addpackage(sitedir, name, known_paths):
 def addsitedir(sitedir, known_paths=None):
     """Add 'sitedir' argument to sys.path if missing and handle .pth files in
     'sitedir'"""
+
     _trace(f"Adding directory: {sitedir!r}")
+
     if known_paths is None:
         known_paths = _init_pathinfo()
         reset = True
     else:
         reset = False
+
+    # 将该 site packages 目录添加到 sys.path
     sitedir, sitedircase = makepath(sitedir)
     if not sitedircase in known_paths:
         sys.path.append(sitedir)        # Add path component
         known_paths.add(sitedircase)
+
+    # 获取该目录下的所有文件
     try:
         names = os.listdir(sitedir)
     except OSError:
         return
+    
+    # 获取所有扩展名为 .pth 文件
     names = [name for name in names if name.endswith(".pth")]
     for name in sorted(names):
         addpackage(sitedir, name, known_paths)
+
     if reset:
         known_paths = None
+        
     return known_paths
 
 
@@ -261,7 +274,11 @@ def check_enableusersite():
 # See https://bugs.python.org/issue29585
 
 # Copy of sysconfig._getuserbase()
+
+# 计算当前用户存储空间（针对 Python）的根目录
 def _getuserbase():
+
+    # 读取由环境变量 $PYTHONUSERBASE 设定的 user base 目录
     env_base = os.environ.get("PYTHONUSERBASE", None)
     if env_base:
         return env_base
@@ -273,31 +290,42 @@ def _getuserbase():
     def joinuser(*args):
         return os.path.expanduser(os.path.join(*args))
 
+    # 对于 Win 系统
+    # 返回 $APPDATA/Python 或 ~/Python
     if os.name == "nt":
         base = os.environ.get("APPDATA") or "~"
         return joinuser(base, "Python")
 
+    # 对于 Mac 系统
+    # 返回 ~/Library/Frameworks/X.Y
     if sys.platform == "darwin" and sys._framework:
         return joinuser("~", "Library", sys._framework,
                         "%d.%d" % sys.version_info[:2])
 
+    # 其他（Unix/Linux/...）系统
+    # 返回 ~/.local
     return joinuser("~", ".local")
 
 
 # Same to sysconfig.get_path('purelib', os.name+'_user')
+# 计算基于当前用户存储空间的 site packages 目录的路径
 def _get_path(userbase):
     version = sys.version_info
 
+    # 对于 Win 系统
     if os.name == 'nt':
         ver_nodot = sys.winver.replace('.', '')
         return f'{userbase}\\Python{ver_nodot}\\site-packages'
 
+    # 对于 Mac 系统
     if sys.platform == 'darwin' and sys._framework:
         return f'{userbase}/lib/python/site-packages'
 
+    # 其他（Unix/Linux/...）系统
     return f'{userbase}/lib/python{version[0]}.{version[1]}/site-packages'
 
 
+# 构造并获得当前用户存储空间（针对 Python）的根目录
 def getuserbase():
     """Returns the `user base` directory path.
 
@@ -311,6 +339,8 @@ def getuserbase():
     return USER_BASE
 
 
+# 构造并获得针对当前用户的 site-packages 目录
+# 这里只是计算出 site-packages 目录的路径，并不会验证该目录是否实际存在，也不会自动创建该目录
 def getusersitepackages():
     """Returns the user-specific site-packages directory path.
 
@@ -328,21 +358,30 @@ def getusersitepackages():
 
     return USER_SITE
 
+# 将当前用户的 site-packages 目录添加到 sys.path 中
+# 这里会验证该目录是否实际存在，只有当目录存在时，才会被添加到 sys.path 中，但不会自动创建该目录。
 def addusersitepackages(known_paths):
     """Add a per user site-package to sys.path
 
     Each user has its own python directory with site-packages in the
     home directory.
     """
+
     # get the per user site-package path
     # this call will also make sure USER_BASE and USER_SITE are set
     _trace("Processing user site-packages")
+
+    # 获取当前用户的 site-packages 目录的存储路径
     user_site = getusersitepackages()
 
+    # 将当前用户的 site-packages 目录添加到 sys.path 中
     if ENABLE_USER_SITE and os.path.isdir(user_site):
         addsitedir(user_site, known_paths)
+
     return known_paths
 
+# 构造并获得 site-packages 目录
+# 这里只是计算出 site-packages 目录的路径，并不会验证该目录是否实际存在，也不会自动创建该目录
 def getsitepackages(prefixes=None):
     """Returns a list containing all global site-packages directories.
 
@@ -350,6 +389,7 @@ def getsitepackages(prefixes=None):
     this function will find its `site-packages` subdirectory depending on the
     system environment, and will return a list of full paths.
     """
+
     sitepackages = []
     seen = set()
 
@@ -377,17 +417,24 @@ def getsitepackages(prefixes=None):
             for libdir in libdirs:
                 path = os.path.join(prefix, libdir, "site-packages")
                 sitepackages.append(path)
+
     return sitepackages
 
+# 将当前用户的 site-packages 目录添加到 sys.path 中
+# 这里会验证该目录是否实际存在，只有当目录存在时，才会被添加到 sys.path 中，但不会自动创建该目录。
 def addsitepackages(known_paths, prefixes=None):
     """Add site-packages to sys.path"""
+
     _trace("Processing global site-packages")
+
     for sitedir in getsitepackages(prefixes):
         if os.path.isdir(sitedir):
             addsitedir(sitedir, known_paths)
 
     return known_paths
 
+# 在 builtins 模块（的命名空间）中，添加 quit 和 exit 对象
+# 对象类型是在 _sitebuiltins.py 中定义的 `class Quitter`
 def setquit():
     """Define new builtins 'quit' and 'exit'.
 
@@ -395,6 +442,7 @@ def setquit():
     The repr of each object contains a hint at how it works.
 
     """
+
     if os.sep == '\\':
         eof = 'Ctrl-Z plus Return'
     else:
@@ -404,8 +452,11 @@ def setquit():
     builtins.exit = _sitebuiltins.Quitter('exit', eof)
 
 
+# 在 builtins 模块（的命名空间）中，添加 copyright、 credits、和 license 对象
+# 对象类型是在 _sitebuiltins.py 中定义的 `class _Printer`
 def setcopyright():
     """Set 'copyright' and 'credits' in builtins"""
+
     builtins.copyright = _sitebuiltins._Printer("copyright", sys.copyright)
     if sys.platform[:4] == 'java':
         builtins.credits = _sitebuiltins._Printer(
@@ -415,6 +466,7 @@ def setcopyright():
         builtins.credits = _sitebuiltins._Printer("credits", """\
     Thanks to CWI, CNRI, BeOpen.com, Zope Corporation and a cast of thousands
     for supporting Python development.  See www.python.org for more information.""")
+
     files, dirs = [], []
     # Not all modules are required to have a __file__ attribute.  See
     # PEP 420 for more details.
@@ -430,6 +482,8 @@ def setcopyright():
         files, dirs)
 
 
+# 在 builtins 模块（的命名空间）中，添加 help 对象
+# 对象类型是在 _sitebuiltins.py 中定义的 `class _Helper`
 def sethelper():
     builtins.help = _sitebuiltins._Helper()
 
@@ -495,6 +549,7 @@ def enablerlcompleter():
 def venv(known_paths):
     global PREFIXES, ENABLE_USER_SITE
 
+
     env = os.environ
     if sys.platform == 'darwin' and '__PYVENV_LAUNCHER__' in env:
         executable = sys._base_executable = os.environ['__PYVENV_LAUNCHER__']
@@ -502,7 +557,9 @@ def venv(known_paths):
         executable = sys.executable
     exe_dir, _ = os.path.split(os.path.abspath(executable))
     site_prefix = os.path.dirname(exe_dir)
+
     sys._home = None
+
     conf_basename = 'pyvenv.cfg'
     candidate_confs = [
         conffile for conffile in (
@@ -512,25 +569,36 @@ def venv(known_paths):
         if os.path.isfile(conffile)
         ]
 
+    # 存在虚拟环境配置
     if candidate_confs:
+
+        # 获取虚拟环境配置文件
         virtual_conf = candidate_confs[0]
+
+        # 默认使用在 python 系统中安装的 site packages
         system_site = "true"
+
         # Issue 25185: Use UTF-8, as that's what the venv module uses when
         # writing the file.
         with open(virtual_conf, encoding='utf-8') as f:
             for line in f:
                 if '=' in line:
+
                     key, _, value = line.partition('=')
-                    key = key.strip().lower()
+                    key = key.strip().lower() 
                     value = value.strip()
+
                     if key == 'include-system-site-packages':
                         system_site = value.lower()
+
                     elif key == 'home':
                         sys._home = value
 
+        # 将虚拟环境目录作为 prefix 和 exec_prefix
         sys.prefix = sys.exec_prefix = site_prefix
 
         # Doing this here ensures venv takes precedence over user-site
+        # 添加虚拟环境中的 site packages 
         addsitepackages(known_paths, [sys.prefix])
 
         # addsitepackages will process site_prefix again if its in PREFIXES,
@@ -599,17 +667,25 @@ def main():
         # fix __file__ and __cached__ of already imported modules too.
         abs_paths()
 
+    # 对虚拟环境进行适配
     known_paths = venv(known_paths)
     if ENABLE_USER_SITE is None:
         ENABLE_USER_SITE = check_enableusersite()
+
+    # 添加基于当前用户的 site packages 路径
     known_paths = addusersitepackages(known_paths)
+    # 添加 site packages 路径
     known_paths = addsitepackages(known_paths)
+
     setquit()
     setcopyright()
     sethelper()
+
     if not sys.flags.isolated:
         enablerlcompleter()
+
     execsitecustomize()
+
     if ENABLE_USER_SITE:
         execusercustomize()
 
@@ -617,6 +693,10 @@ def main():
 # site is imported later.
 if not sys.flags.no_site:
     main()
+
+###############################################################################
+# 模块的运行入口
+###############################################################################
 
 def _script():
     help = """\
@@ -633,19 +713,28 @@ def _script():
           or for security reasons
      >2 - unknown error
     """
+
     args = sys.argv[1:]
+
+    # 如果没有指定 [--user-base] 和 [--user-site] 参数
     if not args:
+
         user_base = getuserbase()
         user_site = getusersitepackages()
+
+        # 输出 sys.path 信息
         print("sys.path = [")
         for dir in sys.path:
             print("    %r," % (dir,))
         print("]")
+
+        # 
         def exists(path):
             if path is not None and os.path.isdir(path):
                 return "exists"
             else:
                 return "doesn't exist"
+
         print(f"USER_BASE: {user_base!r} ({exists(user_base)})")
         print(f"USER_SITE: {user_site!r} ({exists(user_site)})")
         print(f"ENABLE_USER_SITE: {ENABLE_USER_SITE!r}")
