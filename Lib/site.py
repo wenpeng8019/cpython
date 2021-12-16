@@ -549,17 +549,21 @@ def enablerlcompleter():
 def venv(known_paths):
     global PREFIXES, ENABLE_USER_SITE
 
-
+    # 获取当前执行 Python 主程序的路径
+    # + 该 Python 主程序可能是链接文件。也就是说，这里不自动解析源文件
     env = os.environ
     if sys.platform == 'darwin' and '__PYVENV_LAUNCHER__' in env:
         executable = sys._base_executable = os.environ['__PYVENV_LAUNCHER__']
     else:
         executable = sys.executable
+
+    # 以 Python 主程序（可能是链接文件）所在目录的父目录作为 site_prefix
     exe_dir, _ = os.path.split(os.path.abspath(executable))
     site_prefix = os.path.dirname(exe_dir)
 
     sys._home = None
 
+    # 在所在目录（exe_dir）、或其父目录（site_prefix）中，查找虚拟配置文件 pyvenv.cfg
     conf_basename = 'pyvenv.cfg'
     candidate_confs = [
         conffile for conffile in (
