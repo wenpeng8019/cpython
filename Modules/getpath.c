@@ -1580,7 +1580,9 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         return status;
     }
 
-    // 解析获取 Python（和平台无关的）标准库所在路径 `prefix`。并将其保存到 calculate->prefix
+    // 解析获取（基于 `prefix` 的）标准库（stdlib）所在路径。并将其保存到 calculate->prefix
+    // + 这里的命名存在歧义。事实上，`prefix` 只是 stdlib 所在的潜在位置之一。
+    //   因此，这里更应该被命名为 "calculate->stdlib_dir"
     status = calculate_prefix(calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -1592,7 +1594,9 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         return status;
     }
 
-    // 解析获取 Python（和平台相关的）共享库所在路径 `exec_prefix`。并将其保存到 calculate->exec_prefix
+    // 解析获取（基于 `exec_prefix` 的）共享动态库（dylib）所在路径 。并将其保存到 calculate->exec_prefix
+    // + 这里的命名存在歧义。事实上，`exec_prefix` 只是 dylib 所在的潜在位置之一
+    //   因此，这里更应该被命名为 "calculate->dylib_dir"
     status = calculate_exec_prefix(calculate, pathconfig);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
@@ -1615,12 +1619,6 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
     }
 
     // 将前面解析得到的 calculate->prefix 值，设置（写回）到 pathconfig->stdlib_dir
-    // 事实上，calculate->prefix 更应该被命名为 "calculate->stdlib_dir"，
-    // 因为它的含义和 stdlib_dir 是一致的，相反和 prefix 的概念则是不匹配的
-    // 具体可以理解为：
-    // > 如果存在本地编译安装（make install）的标准库，则将 stdlib_dir 指向该库（路径）
-    // > 否则将 stdlib_dir 指向由 pathconfig->prefix 设定的库路径
-    // 总的来说，stdlib_dir 是最终目的，而 prefix 则是用于设定 stdlib_dir 的一个（补充备选）方案
     if (pathconfig->stdlib_dir == NULL) {
         /* This must be done *before* calculate_set_prefix() is called. */
         status = calculate_set_stdlib_dir(calculate, pathconfig);
@@ -1629,8 +1627,9 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         }
     }
 
-    // 用前面解析得到的 calculate->prefix 值，来设置（写回）pathconfig->prefix
-    // ! 如果前面解析得到的 calculate->prefix 值，是通过本地编译安装（make install）的标准库
+    // 解析计算 Python 库的 `prefix`，即和平台无关的库的安装路径
+    // 这里用前面解析得到的 calculate->prefix 值，来设置（写回）pathconfig->prefix
+    // ! 如果前面解析得到的 calculate->prefix 值（即 stdlib 的路径），是通过本地编译安装（make install）的标准库
     //   则这里设置（写回）到 pathconfig->prefix 中的值，会变成编译宏定义 prefix_macro 的值（即默认值）
     // ! 前面解析得到的 calculate->prefix 是标准库的实际全路径，即 "<prefix>/<lib_python>/"
     //   而这里设置（写回）到 pathconfig->prefix 中的值，则是去除 <lib_python>（相对路径）部分的 <prefix> 值
@@ -1641,6 +1640,7 @@ calculate_path(PyCalculatePath *calculate, _PyPathConfig *pathconfig)
         }
     }
 
+    // 解析计算 Python 库的 `exec_prefix`，即和平台相关的库的安装路径
     // 将前面解析得到的 calculate->exec_prefix 值，设置（写回）到 pathconfig->exec_prefix
     // ! 前面解析得到的 calculate->exec_prefix 是共享库的实际全路径，即 "<exec_prefix>/<lib_python>/lib-dynload/"
     //   而这里设置（写回）到 pathconfig->exec_prefix 中的值，则是去除 <lib_python>/lib-dynload（相对路径）部分的 <exec_prefix> 值
